@@ -1,0 +1,543 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>I-Pace Fault Reader</title>
+<meta name="description" content="Read-only fault and battery reader for a Jaguar I-Pace, using a Bluetooth OBD-II adapter.">
+<style>
+:root{
+  --bg:#f6f7f9;--card:#ffffff;--ink:#16191d;--muted:#5d6671;--line:#dde1e6;
+  --accent:#0b6e4f;--accent-ink:#ffffff;--warn-bg:#fff4d6;--warn-ink:#6b4a00;
+  --bad:#b3261e;--bad-bg:#fde7e5;--ok:#1f7a3a;--ok-bg:#e3f4e8;--chip:#eef1f4;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#111417;--card:#1a1e23;--ink:#e8ebee;--muted:#9aa4ae;--line:#2b3138;
+  --accent:#3fb68b;--accent-ink:#06140f;--warn-bg:#3a2f10;--warn-ink:#f3d58a;
+  --bad:#ff8a80;--bad-bg:#3d1a18;--ok:#7bd99a;--ok-bg:#16301f;--chip:#242a31;}}
+:root[data-theme="dark"]{
+  --bg:#111417;--card:#1a1e23;--ink:#e8ebee;--muted:#9aa4ae;--line:#2b3138;
+  --accent:#3fb68b;--accent-ink:#06140f;--warn-bg:#3a2f10;--warn-ink:#f3d58a;
+  --bad:#ff8a80;--bad-bg:#3d1a18;--ok:#7bd99a;--ok-bg:#16301f;--chip:#242a31;}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:720px;margin:0 auto;padding:16px 16px 48px}
+h1{font-size:1.35rem;margin:4px 0 2px}
+h2{font-size:1.05rem;margin:0 0 8px}
+p{margin:6px 0}
+.sub{color:var(--muted);font-size:.92rem}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin:12px 0}
+.notice{background:var(--warn-bg);color:var(--warn-ink);border-radius:10px;padding:10px 12px;font-size:.9rem}
+button{font:inherit;border:0;border-radius:10px;padding:12px 14px;min-height:48px;width:100%;margin:6px 0;cursor:pointer;
+  background:var(--chip);color:var(--ink);text-align:left}
+button.primary{background:var(--accent);color:var(--accent-ink);font-weight:600}
+button:disabled{opacity:.45;cursor:not-allowed}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.row>button{flex:1 1 140px}
+.status{display:flex;align-items:center;gap:8px;font-size:.95rem}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--muted);flex:none}
+.dot.on{background:var(--ok)}
+.dot.busy{background:#d99a00}
+.mod{border-top:1px solid var(--line);padding:10px 0}
+.mod:first-child{border-top:0}
+.mod h3{font-size:.98rem;margin:0 0 4px}
+.dtc{background:var(--bad-bg);border-radius:8px;padding:8px 10px;margin:6px 0}
+.dtc b{font-family:var(--mono)}
+.dtc .flags{font-size:.85rem;color:var(--muted)}
+.clean{color:var(--ok)}
+.err{color:var(--muted);font-size:.9rem}
+.raw{font-family:var(--mono);font-size:.78rem;word-break:break-all;color:var(--muted)}
+table{width:100%;border-collapse:collapse;font-size:.92rem}
+td{padding:5px 0;border-bottom:1px solid var(--line)}
+td:last-child{text-align:right;font-variant-numeric:tabular-nums;font-family:var(--mono)}
+#log{font-family:var(--mono);font-size:.75rem;white-space:pre-wrap;word-break:break-all;max-height:260px;overflow:auto;
+  background:var(--chip);border-radius:8px;padding:8px;margin:0}
+details summary{cursor:pointer;color:var(--muted);font-size:.92rem;padding:4px 0}
+.events li{font-size:.9rem;margin:3px 0}
+</style>
+</head>
+<body>
+<main>
+  <h1>I-Pace Fault Reader</h1>
+  <p class="sub">Reads fault codes and battery data through your Veepeak OBDCheck BLE adapter. <span id="modeNote"></span></p>
+
+  <div class="notice"><b>Read-only.</b> This app can only read. It cannot clear codes, change settings or update software, and it refuses to send any other kind of command. If the car shows a high-voltage warning telling you not to charge or drive, follow that first.</div>
+
+  <section class="card">
+    <h2>1. Connect</h2>
+    <p class="sub">Plug the adapter into the OBD port (under the dashboard, driver's side, above the pedals). Turn the car on (press the start button without your foot on the brake). Then tap Connect and pick the adapter from the list. Don't pair it in Android's Bluetooth settings.</p>
+    <button class="primary" id="btnConnect">Connect to adapter</button>
+    <div class="status"><span class="dot" id="dot"></span><span id="statusText">Not connected</span></div>
+  </section>
+
+  <section class="card">
+    <h2>2. Read fault codes</h2>
+    <p class="sub">Asks each module for its stored fault codes, then for the snapshot the car saved when each code was set.</p>
+    <div class="row">
+      <button class="primary" id="btnScanCharge" disabled>Scan charging &amp; battery modules</button>
+      <button id="btnScanAll" disabled>Scan all modules (about 2 minutes)</button>
+    </div>
+    <div id="dtcOut"></div>
+  </section>
+
+  <section class="card">
+    <h2>3. Battery readings</h2>
+    <button id="btnLive" disabled>Read battery values now</button>
+    <table id="liveTable"></table>
+  </section>
+
+  <section class="card">
+    <h2>4. Watch while plugging in</h2>
+    <p class="sub">Start watching, wait for one or two readings, then plug the charging cable in. The app records battery values and checks the battery and charger modules for new faults every few seconds, so you can see exactly when the charge fails. Keep the screen on.</p>
+    <div class="row">
+      <button class="primary" id="btnWatch" disabled>Start watching</button>
+      <button id="btnStop" disabled>Stop</button>
+    </div>
+    <p class="sub" id="watchInfo"></p>
+    <ul class="events" id="events"></ul>
+  </section>
+
+  <section class="card">
+    <h2>5. Save the report</h2>
+    <p class="sub">Saves everything above as a text file you can send to the garage, alongside a full log.</p>
+    <div class="row">
+      <button class="primary" id="btnShare">Share report</button>
+      <button id="btnSave">Download report</button>
+    </div>
+  </section>
+
+  <details class="card">
+    <summary>Adapter log (for troubleshooting)</summary>
+    <pre id="log"></pre>
+  </details>
+</main>
+
+<script>
+"use strict";
+/* ============ Known I-Pace module addresses (from the open-source OVMS project) ============ */
+const MODULES = [
+  [0x7E4,"BECM","Battery Energy Control Module (HV battery)",true],
+  [0x7E5,"BCCM","Battery Charger Control Module (on-board charger, charge port)",true],
+  [0x7E0,"PCM","Powertrain Control Module",true],
+  [0x726,"GWM","Gateway / Body Control Module",true],
+  [0x753,"DCDC","DC-DC Converter",true],
+  [0x747,"EPIC-F","Front Electric Power Inverter",true],
+  [0x746,"EPIC-R","Rear Electric Power Inverter",true],
+  [0x733,"HVAC","Climate Control (includes HV heater control)",true],
+  [0x785,"RHVAC","Rear Climate Control",false],
+  [0x7E2,"BBM","Brake Booster Module",false],
+  [0x7E6,"ABS","Anti-lock Braking",false],
+  [0x720,"IPC","Instrument Cluster",false],
+  [0x754,"TCU","Telematics",false],
+  [0x792,"ATCM","Drive Switchpack",false],
+  [0x710,"CHCM","Chassis Control",false],
+  [0x730,"PSCM","Power Steering",false],
+  [0x731,"RFA","Remote Function Actuator",false],
+  [0x732,"GSM","Gear Shift Module",false],
+  [0x734,"HCM","Headlamp Module",false],
+  [0x7C3,"HCM-B","Headlamp Module B",false],
+  [0x736,"PAM","Parking Aid",false],
+  [0x737,"RCM","Restraints (airbags)",false],
+  [0x740,"DDM","Driver Door",false],
+  [0x741,"PDM","Passenger Door",false],
+  [0x742,"DRDM","Driver Rear Door",false],
+  [0x743,"PRDM","Passenger Rear Door",false],
+  [0x744,"DSM","Driver Seat",false],
+  [0x7A3,"PSM","Passenger Seat",false],
+  [0x751,"TPMS","Tyre Pressure",false],
+  [0x752,"OMM","Occupant Monitoring",false],
+  [0x764,"ASCM","Adaptive Cruise",false],
+  [0x775,"RGTM","Tailgate",false],
+  [0x797,"SASM","Steering Angle",false],
+  [0x7A2,"IDMA","Interactive Display",false],
+  [0x7A4,"AAM","Audio Amplifier",false],
+  [0x7B1,"CMR","Rear Camera",false],
+  [0x7B2,"HUD","Head-up Display",false],
+  [0x7B3,"IMC","Infotainment",false],
+  [0x706,"IPMA","Image Processing",false],
+  [0x716,"SDLC","Unknown module",false],
+  [0x7C4,"SODL","Blind Spot Left",false],
+  [0x7C6,"SODR","Blind Spot Right",false],
+];
+
+/* BECM data identifiers and scaling (from OVMS ipace_poll_becm.cpp) */
+const BECM_DIDS = [
+  [0x4910,"State of charge","%",b=>u16(b)/100],
+  [0x490F,"Pack voltage","V",b=>u16(b)/100],
+  [0x490C,"Pack current (+ = in)","A",b=>(u16(b)-0x8000)/40],
+  [0x4904,"Lowest cell voltage","V",b=>u16(b)/1000],
+  [0x4903,"Highest cell voltage","V",b=>u16(b)/1000],
+  [0x4906,"Coolest battery temp","°C",b=>b[0]/2-40],
+  [0x4905,"Warmest battery temp","°C",b=>b[0]/2-40],
+  [0x4907,"Average battery temp","°C",b=>b[0]/2-40],
+  [0x4918,"Health (capacity)","%",b=>b[0]/2],
+  [0x4915,"Health (power)","%",b=>b[0]/2],
+  [0x4913,"Max regen","kW",b=>u16(b)/100],
+  [0xDD01,"Odometer","km",b=>(b[0]<<16)|(b[1]<<8)|b[2]],
+];
+function u16(b){return (b[0]<<8)|b[1]}
+
+/* Plain-English notes for codes already seen on this car */
+const DTC_NOTES = {
+  "P0AA6":"High-voltage isolation fault: the car has measured a leak between the high-voltage system and the body. The car blocks charging while it is present. It needs HV insulation testing by a trained technician.",
+  "P0D94":"Charge-port (coupler) lock circuit performance: the cable lock didn't behave as expected.",
+  "U3001":"Control module improper shutdown: the module lost power or didn't shut down cleanly.",
+  "U0064":"Communication on vehicle bus E: messages missing or not updating.",
+  "U0080":"Communication on vehicle bus F: messages missing or not updating.",
+  "B1479":"Power supply distribution box actuator stuck open.",
+  "P0AA1":"HV battery positive contactor stuck closed.",
+  "P0AA4":"HV battery negative contactor stuck closed.",
+  "P0A0A":"High-voltage interlock (HVIL) circuit fault.",
+  "P0A0D":"High-voltage interlock circuit high.",
+  "P0A94":"DC-DC converter performance.",
+};
+const STATUS_BITS = ["failing now","failed this drive cycle","pending","confirmed","not tested since cleared","failed since cleared","not tested this cycle","warning light requested"];
+
+/* ============ Safety: only these requests may ever be sent ============ */
+const ALLOWED_AT = /^AT(Z|E0|L0|S0|H0|SP6|AT1|STFF|SH[0-9A-F]{3}|CRA[0-9A-F]{3}|FCSH[0-9A-F]{3}|FCSD300000|FCSM1|RV|I|DPN)$/;
+function assertReadOnly(hex){
+  const sid = hex.slice(0,2);
+  if (sid === "22") { if (!/^22([0-9A-F]{4})+$/.test(hex)) throw new Error("Blocked: malformed read"); return; }
+  if (sid === "19") { if (!/^19(02FF|04[0-9A-F]{6}FF|06[0-9A-F]{6}FF)$/.test(hex)) throw new Error("Blocked: unsupported fault-read request"); return; }
+  throw new Error("Blocked: this app only sends read requests (service "+sid+" refused)");
+}
+
+/* ============ UI helpers ============ */
+const $ = id => document.getElementById(id);
+const logLines = [];
+function log(s){ const t=new Date().toISOString().slice(11,23); logLines.push(t+" "+s); const el=$("log"); el.textContent = logLines.slice(-400).join("\n"); el.scrollTop=el.scrollHeight; }
+function setStatus(text, state){ $("statusText").textContent=text; $("dot").className="dot"+(state?" "+state:""); }
+function el(tag, cls, text){ const e=document.createElement(tag); if(cls) e.className=cls; if(text!=null) e.textContent=text; return e; }
+const sleep = ms => new Promise(r=>setTimeout(r,ms));
+const hex2 = n => n.toString(16).toUpperCase().padStart(2,"0");
+const hex3 = n => n.toString(16).toUpperCase().padStart(3,"0");
+
+/* ============ Transport: Web Bluetooth ELM327 ============ */
+const BLE_SERVICES = [0xfff0,0xffe0,0xffb0,0x18f0,0xbeef,"e7810a71-73ae-499d-8c15-faa9aef0c3f2","0000fff0-0000-1000-8000-00805f9b34fb"];
+class BleTransport {
+  async open(){
+    if (!navigator.bluetooth) throw new Error("This browser has no Web Bluetooth. Use Chrome on Android, opened from an https:// address.");
+    this.device = await navigator.bluetooth.requestDevice({acceptAllDevices:true, optionalServices:BLE_SERVICES});
+    this.device.addEventListener("gattserverdisconnected",()=>{ setStatus("Adapter disconnected", ""); setButtons(false); });
+    const server = await this.device.gatt.connect();
+    const services = await server.getPrimaryServices();
+    for (const s of services){
+      const chars = await s.getCharacteristics();
+      for (const c of chars){
+        if (!this.rx && (c.properties.notify || c.properties.indicate)) this.rx=c;
+        if (!this.tx && (c.properties.write || c.properties.writeWithoutResponse)) this.tx=c;
+      }
+      if (this.rx && this.tx) break;
+    }
+    if (!this.rx || !this.tx) throw new Error("Connected, but couldn't find the adapter's data channel. Is this the OBD adapter?");
+    this.buf=""; this.waiter=null;
+    this.rx.addEventListener("characteristicvaluechanged", e=>{
+      this.buf += new TextDecoder().decode(e.target.value);
+      if (this.buf.includes(">") && this.waiter){ const w=this.waiter; this.waiter=null; w(); }
+    });
+    await this.rx.startNotifications();
+    return this.device.name || "adapter";
+  }
+  async send(cmd, timeout=6000){
+    this.buf="";
+    const done = new Promise((res,rej)=>{ this.waiter=res; setTimeout(()=>{ if(this.waiter===res){ this.waiter=null; rej(new Error("Adapter timed out on "+cmd)); } }, timeout); });
+    const bytes = new TextEncoder().encode(cmd+"\r");
+    for (let i=0;i<bytes.length;i+=20){
+      const chunk=bytes.slice(i,i+20);
+      if (this.tx.properties.writeWithoutResponse && this.tx.writeValueWithoutResponse) await this.tx.writeValueWithoutResponse(chunk);
+      else await this.tx.writeValue(chunk);
+    }
+    await done;
+    return this.buf.replace(">","");
+  }
+  close(){ try{ this.device.gatt.disconnect(); }catch(e){} }
+}
+
+/* Simulated adapter for demo/testing (?demo in the address). Behaves like an I-Pace with an isolation fault. */
+class DemoTransport {
+  constructor(){ this.hdr=0x7E0; this.t0=Date.now(); }
+  async open(){ return "Demo adapter (simulated car)"; }
+  async send(cmd){
+    await sleep(40);
+    if (cmd.startsWith("AT")){ if(cmd.startsWith("ATSH")) this.hdr=parseInt(cmd.slice(4),16); return cmd==="ATZ"?"ELM327 v2.2\r\r":"OK\r\r"; }
+    const t=(Date.now()-this.t0)/1000, plugged = t>12;
+    const H=this.hdr;
+    const iso = hex => { // multi-frame format like a real ELM with CAF1, ATH0
+      const b=hex.match(/../g); if(b.length<=7) return b.join(" ")+"\r\r";
+      let out=hex3(b.length)+"\r0: "+b.slice(0,6).join(" ")+"\r"; let i=6,n=1;
+      while(i<b.length){ out+=(n%16).toString(16).toUpperCase()+": "+b.slice(i,i+7).join(" ")+"\r"; i+=7;n++; } return out+"\r"; };
+    if (cmd==="1902FF"){
+      if (H===0x7E4) return iso("5902FF"+"0AA600"+(plugged?"09":"08")+"F00100"+"08");
+      if (H===0x7E5) return iso("5902FF"+"0D9400"+"08"+"C06482"+"09");
+      if (H===0x726) return iso("5902FF"+"947972"+"08");
+      if (H===0x7E0||H===0x733||H===0x753) return iso("5902FF");
+      return "NO DATA\r\r";
+    }
+    if (cmd.startsWith("1904")) return iso("5904"+cmd.slice(4,10)+"08"+"01"+"03"+"DD01"+"00F2A1"+"4910"+"1B58"+"490F"+"8D2C");
+    if (cmd.startsWith("1906")) return iso("5906"+cmd.slice(4,10)+"08"+"01"+"07"+"02"+"03");
+    if (cmd.startsWith("22") && H===0x7E4){
+      const did=cmd.slice(2,6);
+      const v={ "4910":"1B58","490F":plugged?"8E10":"8D2C","490C":plugged&&t<20?"8050":"8000","4904":"0F3C","4903":"0F46",
+        "4906":"6E","4905":"74","4907":"71","4918":"B6","4915":"BE","4913":"1D4C","DD01":"00F2A1","F190":"44454D4F30303030303030303030303030"}[did];
+      return v? iso("62"+did+v) : "7F 22 31\r\r";
+    }
+    return "NO DATA\r\r";
+  }
+  close(){}
+}
+
+/* ============ ELM327 + UDS layer ============ */
+let T=null, currentHdr=null;
+async function at(cmd){
+  if (!ALLOWED_AT.test(cmd)) throw new Error("Blocked adapter command "+cmd);
+  const r = await T.send(cmd, cmd==="ATZ"?8000:4000); log("> "+cmd+"  < "+r.replace(/\s+/g," ").trim()); return r;
+}
+async function initElm(){
+  await at("ATZ"); await sleep(800);
+  for (const c of ["ATE0","ATL0","ATS0","ATH0","ATSP6","ATAT1","ATSTFF"]) await at(c);
+  const ver = (await at("ATI")).trim();
+  return ver;
+}
+async function selectModule(tx){
+  if (currentHdr===tx) return;
+  const h=hex3(tx), r=hex3(tx+8);
+  await at("ATSH"+h); await at("ATCRA"+r);
+  try { await at("ATFCSH"+h); await at("ATFCSD300000"); await at("ATFCSM1"); } catch(e){ log("flow-control setup not supported: "+e.message); }
+  currentHdr=tx;
+}
+/* Parse ELM output (CAF1, headers off) into a byte array, or an error string */
+function parseElm(text){
+  const lines=text.split(/[\r\n]+/).map(s=>s.trim()).filter(Boolean);
+  const errs=["NO DATA","CAN ERROR","BUS INIT","UNABLE TO CONNECT","STOPPED","?","BUFFER FULL","ERROR","SEARCHING..."];
+  let msgs=[], cur=null, len=null;
+  for (let ln of lines){
+    if (ln==="SEARCHING...") continue;
+    if (errs.some(e=>ln.startsWith(e))) return {error:ln};
+    ln=ln.replace(/\s+/g,"");
+    if (/^[0-9A-F]{3}$/.test(ln)){ cur=[]; len=parseInt(ln,16); msgs.push({b:cur,len}); continue; }
+    const m=ln.match(/^([0-9A-F]):([0-9A-F]+)$/);
+    if (m && cur){ cur.push(...m[2].match(/../g).map(x=>parseInt(x,16))); continue; }
+    if (/^[0-9A-F]+$/.test(ln) && ln.length%2===0){ cur=null; msgs.push({b:ln.match(/../g).map(x=>parseInt(x,16)),len:null}); continue; }
+  }
+  msgs = msgs.map(m=> m.len!=null ? m.b.slice(0,m.len) : m.b);
+  // drop "response pending" (7F xx 78) messages
+  msgs = msgs.filter(b=>!(b[0]===0x7F && b[2]===0x78));
+  if (!msgs.length) return {error:"empty reply"};
+  return {bytes:msgs[msgs.length-1]};
+}
+const NRC={0x11:"service not supported",0x12:"sub-function not supported",0x13:"bad length",0x22:"conditions not correct",0x31:"not available",0x33:"security access denied",0x7F:"not supported in this session"};
+async function uds(tx, hex){
+  hex=hex.toUpperCase(); assertReadOnly(hex);
+  await selectModule(tx);
+  const raw = await T.send(hex, 8000);
+  log(hex3(tx)+" > "+hex+"  < "+raw.replace(/\s+/g," ").trim());
+  const p=parseElm(raw);
+  if (p.error) return p;
+  const b=p.bytes;
+  if (b[0]===0x7F) return {error:"refused: "+(NRC[b[2]]||("code "+hex2(b[2])))};
+  if (b[0]!==parseInt(hex.slice(0,2),16)+0x40) return {error:"unexpected reply "+b.map(hex2).join("")};
+  return {bytes:b};
+}
+
+/* ============ DTC handling ============ */
+function dtcName(b0,b1,b2){
+  const L="PCBU"[b0>>6], d=(b0>>4)&3, rest=((b0&0xF).toString(16)+hex2(b1)).toUpperCase();
+  return {code:L+d+rest, full:L+d+rest+"-"+hex2(b2)};
+}
+function statusWords(s){ return STATUS_BITS.filter((_,i)=>s&(1<<i)); }
+const scanResults = {}; // key: module name
+async function readModule(mod){
+  const [tx,short,long]=mod;
+  const out={module:short, desc:long, addr:hex3(tx), dtcs:[], error:null};
+  const r = await uds(tx,"1902FF");
+  if (r.error){ out.error=r.error; return out; }
+  const b=r.bytes;
+  for (let i=3;i+3<b.length;i+=4){
+    const n=dtcName(b[i],b[i+1],b[i+2]);
+    out.dtcs.push({...n, dtcHex:hex2(b[i])+hex2(b[i+1])+hex2(b[i+2]), status:b[i+3], words:statusWords(b[i+3])});
+  }
+  for (const d of out.dtcs){
+    const s=await uds(tx,"1904"+d.dtcHex+"FF");
+    d.snapshot = s.error ? "("+s.error+")" : s.bytes.map(hex2).join(" ");
+    d.snapshotDecoded = s.error ? [] : decodeSnapshot(s.bytes);
+    const e=await uds(tx,"1906"+d.dtcHex+"FF");
+    d.extended = e.error ? "("+e.error+")" : e.bytes.map(hex2).join(" ");
+  }
+  return out;
+}
+/* Best effort: snapshot records hold DIDs we know how to scale */
+function decodeSnapshot(b){
+  const found=[];
+  for (let i=6;i<b.length-1;i++){
+    const did=(b[i]<<8)|b[i+1];
+    const def=BECM_DIDS.find(d=>d[0]===did);
+    if (def){ const need = did===0xDD01?3:([0x4906,0x4905,0x4907,0x4918,0x4915].includes(did)?1:2);
+      const data=b.slice(i+2,i+2+need); if(data.length===need){ found.push(def[1]+": "+fmt(def[3](data))+" "+def[2]); i+=1+need; } }
+  }
+  return found;
+}
+function fmt(v){ return Number.isInteger(v)? String(v) : v.toFixed(2); }
+
+function renderModule(res){
+  const box=el("div","mod");
+  box.appendChild(el("h3",null,res.module+" · "+res.desc));
+  if (res.error){ box.appendChild(el("div","err",res.error==="NO DATA"?"No reply (module asleep, or not fitted)":"No result: "+res.error)); return box; }
+  if (!res.dtcs.length){ box.appendChild(el("div","clean","No fault codes stored")); return box; }
+  for (const d of res.dtcs){
+    const c=el("div","dtc");
+    const t=el("div"); t.appendChild(el("b",null,d.full)); if (DTC_NOTES[d.code]) t.appendChild(document.createTextNode(" · "+DTC_NOTES[d.code]));
+    c.appendChild(t);
+    c.appendChild(el("div","flags","Status: "+(d.words.join(", ")||"stored")));
+    if (d.snapshotDecoded.length) c.appendChild(el("div","flags","When it was logged: "+d.snapshotDecoded.join(", ")));
+    c.appendChild(el("div","raw","snapshot "+d.snapshot));
+    c.appendChild(el("div","raw","extended "+d.extended));
+    box.appendChild(c);
+  }
+  return box;
+}
+async function scan(all){
+  busy(true);
+  const out=$("dtcOut"); out.textContent="";
+  const list = MODULES.filter(m=>all||m[3]);
+  let i=0;
+  try{
+    for (const m of list){
+      i++; setStatus("Reading "+m[1]+" ("+i+" of "+list.length+")","busy");
+      let res; try{ res=await readModule(m); }catch(e){ res={module:m[1],desc:m[2],addr:hex3(m[0]),dtcs:[],error:e.message}; }
+      scanResults[m[1]]=res; out.appendChild(renderModule(res));
+    }
+    const total=Object.values(scanResults).reduce((n,r)=>n+r.dtcs.length,0);
+    setStatus("Scan finished: "+total+" fault code(s) found","on");
+  }finally{ busy(false); }
+}
+
+/* ============ Live data ============ */
+async function readLive(){
+  const vals={};
+  for (const [did,name,unit,f] of BECM_DIDS){
+    const r=await uds(0x7E4,"22"+did.toString(16).toUpperCase().padStart(4,"0"));
+    vals[name] = r.error ? null : {v:f(r.bytes.slice(3)), unit};
+  }
+  return vals;
+}
+function renderLive(vals){
+  const t=$("liveTable"); t.textContent="";
+  for (const [k,x] of Object.entries(vals)){
+    const tr=el("tr"); tr.appendChild(el("td",null,k)); tr.appendChild(el("td",null, x? fmt(x.v)+" "+x.unit : "–")); t.appendChild(tr);
+  }
+}
+let lastLive=null;
+async function liveOnce(){ busy(true); try{ setStatus("Reading battery values","busy"); lastLive=await readLive(); renderLive(lastLive); setStatus("Battery values read","on"); } finally{ busy(false); } }
+
+/* ============ Watch mode ============ */
+let watching=false, watchRows=[], watchEvents=[], wakeLock=null;
+function addEvent(s){ const t=new Date().toLocaleTimeString("en-GB"); watchEvents.push(t+"  "+s); const li=el("li",null,t+"  "+s); $("events").prepend(li); }
+async function watch(){
+  watching=true; busy(true); $("btnStop").disabled=false; $("events").textContent=""; watchRows=[]; watchEvents=[];
+  try{ wakeLock = await navigator.wakeLock?.request("screen"); }catch(e){}
+  const prev={};
+  addEvent("Watching started. Plug the cable in after the first reading.");
+  let n=0;
+  while(watching){
+    n++;
+    try{
+      const v=await readLive(); renderLive(v); lastLive=v;
+      const row={time:new Date().toISOString()}; for(const [k,x] of Object.entries(v)) row[k]=x?x.v:"";
+      watchRows.push(row);
+      const cur=v["Pack current (+ = in)"];
+      $("watchInfo").textContent="Reading "+n+": "+(cur? "current "+fmt(cur.v)+" A":"current unknown")+(v["Pack voltage"]?", "+fmt(v["Pack voltage"].v)+" V":"");
+      for (const m of MODULES.filter(m=>m[1]==="BECM"||m[1]==="BCCM")){
+        const r=await uds(m[0],"1902FF");
+        if (r.error) continue;
+        const b=r.bytes;
+        for (let i=3;i+3<b.length;i+=4){
+          const d=dtcName(b[i],b[i+1],b[i+2]), s=b[i+3], key=m[1]+d.full;
+          if (prev[key]===undefined && n>1) addEvent(m[1]+": NEW fault "+d.full+" ("+statusWords(s).join(", ")+")");
+          else if (prev[key]!==undefined && (prev[key]&1)!==(s&1)) addEvent(m[1]+": "+d.full+((s&1)?" is now FAILING":" stopped failing"));
+          prev[key]=s;
+        }
+      }
+      if (cur && Math.abs(cur.v)>2 && !watchEvents.some(e=>e.includes("Current flowing"))) addEvent("Current flowing: "+fmt(cur.v)+" A");
+    }catch(e){ addEvent("Read error: "+e.message); }
+    await sleep(2000);
+  }
+  try{ await wakeLock?.release(); }catch(e){}
+  addEvent("Watching stopped.");
+  busy(false); $("btnStop").disabled=true;
+}
+
+/* ============ Report ============ */
+let vin="", adapterInfo="";
+function buildReport(){
+  const L=[];
+  L.push("JAGUAR I-PACE FAULT READER REPORT");
+  L.push("Created: "+new Date().toLocaleString("en-GB"));
+  L.push("VIN (from BECM): "+(vin||"not read"));
+  L.push("Adapter: "+adapterInfo);
+  L.push("Read-only scan. No codes were cleared and nothing was written to the car.");
+  L.push("");
+  L.push("== FAULT CODES ==");
+  const mods=Object.values(scanResults);
+  if (!mods.length) L.push("(no scan run)");
+  for (const r of mods){
+    if (r.error){ L.push(r.module+" ["+r.addr+"]: "+r.error); continue; }
+    if (!r.dtcs.length){ L.push(r.module+" ["+r.addr+"]: no codes"); continue; }
+    L.push(r.module+" ["+r.addr+"] "+r.desc+":");
+    for (const d of r.dtcs){
+      L.push("  "+d.full+"  status 0x"+hex2(d.status)+" ("+(d.words.join(", ")||"stored")+")");
+      if (DTC_NOTES[d.code]) L.push("    "+DTC_NOTES[d.code]);
+      if (d.snapshotDecoded.length) L.push("    Logged at: "+d.snapshotDecoded.join(", "));
+      L.push("    snapshot: "+d.snapshot);
+      L.push("    extended: "+d.extended);
+    }
+  }
+  L.push("");
+  L.push("== BATTERY VALUES (latest) ==");
+  if (lastLive) for (const [k,x] of Object.entries(lastLive)) L.push("  "+k+": "+(x?fmt(x.v)+" "+x.unit:"no reply"));
+  else L.push("(not read)");
+  L.push("");
+  L.push("== WATCH EVENTS ==");
+  L.push(...(watchEvents.length?watchEvents:["(watch not run)"]));
+  if (watchRows.length){
+    L.push(""); L.push("== WATCH LOG (CSV) ==");
+    const keys=Object.keys(watchRows[0]); L.push(keys.join(","));
+    for (const r of watchRows) L.push(keys.map(k=>r[k]).join(","));
+  }
+  L.push(""); L.push("== ADAPTER LOG =="); L.push(...logLines);
+  return L.join("\n");
+}
+function reportFile(){ const name="ipace-report-"+new Date().toISOString().slice(0,16).replace(/[:T]/g,"-")+".txt"; return new File([buildReport()],name,{type:"text/plain"}); }
+function download(){ const f=reportFile(); const a=el("a"); a.href=URL.createObjectURL(f); a.download=f.name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),5000); }
+async function share(){ const f=reportFile(); if (navigator.canShare && navigator.canShare({files:[f]})){ try{ await navigator.share({files:[f],title:"I-Pace fault report"}); }catch(e){} } else download(); }
+
+/* ============ Wiring ============ */
+const demo = new URLSearchParams(location.search).has("demo");
+if (demo) $("modeNote").textContent="Demo mode: talking to a simulated car, not a real adapter.";
+let connected=false;
+function setButtons(on){ connected=on; for (const id of ["btnScanCharge","btnScanAll","btnLive","btnWatch"]) $(id).disabled=!on; }
+function busy(b){ for (const id of ["btnScanCharge","btnScanAll","btnLive","btnWatch","btnConnect"]) $(id).disabled = b || (id!=="btnConnect" && !connected); }
+$("btnConnect").onclick = async ()=>{
+  try{
+    setStatus("Connecting…","busy");
+    T = demo ? new DemoTransport() : new BleTransport();
+    const name = await T.open(); currentHdr=null;
+    const ver = await initElm(); adapterInfo=name+" / "+ver.replace(/\s+/g," ");
+    setStatus("Connected to "+name+". Checking the car…","busy");
+    const v=await uds(0x7E4,"22F190");
+    if (v.error){ setStatus("Adapter connected, but the battery module didn't answer ("+v.error+"). Is the car switched on?","busy"); }
+    else { vin=String.fromCharCode(...v.bytes.slice(3).filter(c=>c>=32&&c<127)); setStatus("Connected. Car VIN "+vin,"on"); }
+    setButtons(true);
+  }catch(e){ setStatus(e.message,""); log("connect error: "+e.message); }
+};
+$("btnScanCharge").onclick=()=>scan(false);
+$("btnScanAll").onclick=()=>scan(true);
+$("btnLive").onclick=liveOnce;
+$("btnWatch").onclick=watch;
+$("btnStop").onclick=()=>{ watching=false; $("btnStop").disabled=true; };
+$("btnSave").onclick=download;
+$("btnShare").onclick=share;
+window.__test = {assertReadOnly, parseElm, dtcName};
+</script>
+</body>
+</html>
