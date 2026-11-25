@@ -787,7 +787,7 @@ $("btnConnect").onclick = async ()=>{
     if (/globally disabled|no Web Bluetooth/i.test(e.message)){
       setStatus("Bluetooth blocked in this browser","bad");
       const b=$("sheetBody"); b.textContent=""; const m=el("div","mod"); m.appendChild(el("h3",null,"Open this in Google Chrome"));
-      for (const t of ["This browser has Bluetooth for web pages switched off. Samsung Internet, and links opened inside other apps, block it.",
+      for (const t of ["This browser has Bluetooth for web pages switched off. Brave, Samsung Internet, and links opened inside other apps block it.", "In Brave: go to brave://flags, search Web Bluetooth, set \"Web Bluetooth API\" to Enabled and tap Relaunch. Or use Chrome instead:",
         "1. Copy this page's address and open it in the Google Chrome app (install it from the Play Store if needed).",
         "2. Make sure Bluetooth and Location are switched on in Android's quick settings.",
         "3. When you tap Connect, allow Chrome to find nearby devices."]) m.appendChild(el("p","sub",t));
