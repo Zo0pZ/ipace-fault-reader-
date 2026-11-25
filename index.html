@@ -7,196 +7,309 @@
 <meta name="description" content="Read-only fault and battery reader for a Jaguar I-Pace, using a Bluetooth OBD-II adapter.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet">
-<meta name="theme-color" content="#0b0c0e">
+<link href="https://fonts.googleapis.com/css2?family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
+<meta name="theme-color" content="#121418">
 <style>
 :root{
-  --bg:#0b0c0e;--bg2:#121417;--card:rgba(255,255,255,.035);--card-hi:rgba(255,255,255,.06);
-  --ink:#f2efe9;--muted:#9a978f;--faint:#5f5d58;--line:rgba(255,255,255,.09);
-  --gold:#c9a96e;--gold-hi:#e6cf9f;--gold-ink:#141210;
-  --ok:#7fc8a0;--warn:#e0b25a;--bad:#e0705f;--bad-bg:rgba(224,112,95,.09);--chip:rgba(255,255,255,.05);
-  --warn-bg:rgba(201,169,110,.08);--warn-ink:#d9c49a;
+  --bg:#121418;--bg2:#1b1e23;--card:#1a1d22;--card2:#23272d;--sheet:#252a31;
+  --ink:#f1f2f4;--muted:#a3a7ad;--faint:#6b7077;--line:rgba(255,255,255,.08);
+  --amber:#f3a531;--amber-ink:#1a1206;--green:#77c25b;--red:#e5534b;--red-bg:rgba(229,83,75,.13);--pill:#262b31;
   --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
   --sans:"Jost",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
   color-scheme:dark;
 }
 *{box-sizing:border-box}
 html{background:var(--bg)}
-body{margin:0;color:var(--ink);font:300 16px/1.5 var(--sans);letter-spacing:.01em;min-height:100vh;
-  background:radial-gradient(120% 60% at 50% -10%,#24272c 0%,rgba(11,12,14,0) 60%),var(--bg);background-attachment:fixed}
-main{max-width:640px;margin:0 auto;padding:max(20px,env(safe-area-inset-top)) 16px 64px}
-b,strong{font-weight:500}
+body{margin:0;color:var(--ink);font:400 16px/1.45 var(--sans);background:var(--bg);min-height:100vh;-webkit-tap-highlight-color:transparent}
+main{max-width:560px;margin:0 auto;padding:0 0 72px}
+svg.i{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;flex:none}
 p{margin:6px 0}
-.sub{color:var(--muted);font-size:.9rem}
+.sub{color:var(--muted);font-size:.92rem}
+.caps{text-transform:uppercase;letter-spacing:.14em}
 
-/* masthead */
-.mast{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:4px 2px 18px}
-.brand{font-weight:500;letter-spacing:.3em;text-transform:uppercase;font-size:.72rem;color:var(--ink);white-space:nowrap}
-.brand span{color:var(--gold)}
-.pill{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:999px;padding:6px 12px;font-size:.78rem;
-  letter-spacing:.1em;text-transform:uppercase;color:var(--muted);max-width:50%;min-width:0;font-size:.7rem}
-#statusText{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.dot{width:7px;height:7px;border-radius:50%;background:var(--faint);flex:none}
-.dot.on{background:var(--ok);box-shadow:0 0 10px var(--ok)}
-.dot.busy{background:var(--warn);box-shadow:0 0 10px var(--warn);animation:pulse 1.2s ease-in-out infinite}
-@keyframes pulse{50%{opacity:.35}}
+/* faceted header */
+.top{position:relative;padding:max(28px,env(safe-area-inset-top)) 24px 0;overflow:hidden;
+  background:
+    linear-gradient(180deg,rgba(18,20,24,0) 30%,var(--bg) 78%),
+    conic-gradient(from 45deg at 25% 12%,#2c3036 0 90deg,#22252a 90deg 180deg,#2a2d33 180deg 270deg,#1d2024 270deg),
+    conic-gradient(from 45deg at 75% 30%,#2b2f35 0 90deg,#1f2226 90deg 180deg,#292c31 180deg 270deg,#202327 270deg);
+  background-blend-mode:normal,soft-light,normal}
+.top:after{content:"";position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(135deg,transparent 49.6%,rgba(255,255,255,.035) 50%,transparent 50.4%),linear-gradient(45deg,transparent 49.6%,rgba(255,255,255,.03) 50%,transparent 50.4%);
+  background-size:260px 260px}
+.name-row{display:flex;justify-content:space-between;align-items:center;position:relative;z-index:1}
+.carname{font-size:1.65rem;font-weight:400;color:#e8e9eb;background:none;border:0;padding:0;margin:0;width:auto;min-height:0;text-align:left;cursor:pointer;letter-spacing:.01em}
+.iconbtn{background:none;border:0;color:var(--ink);width:44px;height:44px;min-height:0;padding:10px;margin:0;border-radius:50%}
+.big{font-size:2.6rem;font-weight:500;line-height:1.15;margin-top:6px;position:relative;z-index:1;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.big .amber{color:var(--amber)}
+.state{display:flex;align-items:center;gap:10px;font-size:1.3rem;font-weight:400;text-transform:uppercase;letter-spacing:.02em;margin-top:6px;position:relative;z-index:1;color:#e6e7e9}
+#statusText{font-size:1.05rem;letter-spacing:.06em}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--faint);flex:none}
+.dot.on{background:var(--green)}
+.dot.bad{background:var(--red)}
+.dot.busy{background:var(--amber);animation:pulse 1.2s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.3}}
+.car{display:block;width:88%;max-width:420px;margin:34px auto 6px;position:relative;z-index:1}
+.vin{text-align:center;font-size:.72rem;letter-spacing:.24em;color:var(--faint);text-transform:uppercase;position:relative;z-index:1}
 
-/* hero */
-.hero{position:relative;text-align:center;padding:26px 16px 22px;border-radius:24px;border:1px solid var(--line);
-  background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.01));overflow:hidden}
-.hero:before{content:"";position:absolute;inset:auto -20% -60% -20%;height:70%;background:radial-gradient(closest-side,rgba(201,169,110,.16),transparent);pointer-events:none}
-.model{font-size:.72rem;letter-spacing:.38em;text-transform:uppercase;color:var(--muted)}
-.gauge{position:relative;width:220px;height:220px;margin:14px auto 6px}
-.gauge svg{width:100%;height:100%;transform:rotate(135deg)}
-.gauge .track{fill:none;stroke:rgba(255,255,255,.07);stroke-width:6;stroke-linecap:round}
-.gauge .arc{fill:none;stroke:url(#gold);stroke-width:6;stroke-linecap:round;transition:stroke-dashoffset 1s cubic-bezier(.2,.8,.2,1)}
-.gauge .read{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
-.gauge .num{font-size:3.4rem;font-weight:300;line-height:1;letter-spacing:-.02em}
-.gauge .num small{font-size:1.2rem;color:var(--muted);margin-left:2px}
-.gauge .lbl{font-size:.7rem;letter-spacing:.3em;text-transform:uppercase;color:var(--muted);margin-top:8px}
-.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border-radius:14px;overflow:hidden;margin-top:14px}
-.stat{background:var(--bg2);padding:12px 6px}
-.stat .v{font-size:1.15rem;font-weight:400;font-variant-numeric:tabular-nums}
-.stat .k{font-size:.66rem;letter-spacing:.22em;text-transform:uppercase;color:var(--muted);margin-top:2px}
-.vin{margin-top:12px;font-size:.72rem;letter-spacing:.2em;color:var(--faint);font-family:var(--mono)}
+/* quick actions */
+.quick{display:flex;justify-content:center;gap:22px;padding:26px 16px 8px}
+.qbtn{width:64px;height:64px;min-height:0;border-radius:50%;background:#262a30;border:0;color:var(--ink);display:grid;place-items:center;padding:0;margin:0;cursor:pointer;transition:background .2s,transform .1s}
+.qbtn:active{transform:scale(.94)}
+.qbtn:disabled{color:#6b7077;background:#1f2328;cursor:not-allowed;opacity:1}
+.qbtn.live{color:var(--amber)}
+.qlabels{display:flex;justify-content:center;gap:22px;padding:0 16px}
+.qlabels span{width:64px;text-align:center;font-size:.66rem;letter-spacing:.12em;text-transform:uppercase;color:var(--faint)}
 
-/* sections */
-.card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:18px;margin:14px 0}
-.eyebrow{display:flex;align-items:baseline;gap:10px;margin:0 0 6px}
-.eyebrow .n{font-size:.72rem;color:var(--gold);letter-spacing:.2em;font-variant-numeric:tabular-nums}
-.eyebrow h2{margin:0;font-size:.82rem;font-weight:500;letter-spacing:.28em;text-transform:uppercase}
-.notice{background:var(--warn-bg);color:var(--warn-ink);border:1px solid rgba(201,169,110,.22);border-radius:14px;padding:12px 14px;font-size:.86rem;margin:14px 0}
-button{font:400 .95rem/1.2 var(--sans);letter-spacing:.06em;border:1px solid var(--line);border-radius:14px;padding:14px 16px;min-height:52px;width:100%;margin:6px 0;
-  cursor:pointer;background:var(--chip);color:var(--ink);text-align:center;transition:background .2s,border-color .2s,transform .1s}
+.wrap{padding:0 20px}
+
+/* light card (weather-card style) */
+.lightcard{margin:22px 0 0;border-radius:14px;padding:16px 18px;color:#1b1d21;
+  background:radial-gradient(120% 140% at 85% 30%,#ffffff 0%,#eef0f3 45%,#dfe3e8 100%)}
+.lightcard .caps{font-size:.8rem;color:#33363b}
+.lightcard .lrow{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.lightcard .lbig{font-size:1.75rem;font-weight:400;color:#202328}
+.lightcard .lside{display:flex;align-items:center;gap:8px;font-size:2rem;font-weight:300;color:#202328;font-variant-numeric:tabular-nums}
+.lightcard svg.i{width:30px;height:30px}
+
+/* stat bar */
+.statbar{display:grid;grid-template-columns:repeat(3,1fr);background:#262a30;border-radius:6px;margin:16px 0 0;padding:14px 4px}
+.statbar>div{text-align:center;position:relative}
+.statbar>div+div:before{content:"";position:absolute;left:0;top:30%;height:40%;border-left:1px solid rgba(255,255,255,.18)}
+.statbar .v{font-size:1.3rem;font-weight:500;font-variant-numeric:tabular-nums}
+.statbar .k{font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+
+/* health list */
+.sect{font-size:1rem;letter-spacing:.12em;text-transform:uppercase;margin:30px 0 6px;font-weight:400}
+.updated{font-size:.78rem;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);text-align:center;margin:22px 0 0}
+.hrow{display:flex;align-items:center;gap:14px;padding:9px 0;width:100%;background:none;border:0;color:var(--ink);text-align:left;min-height:0;margin:0;border-radius:0;font:inherit;cursor:pointer}
+.hrow .t{flex:1;font-size:1.02rem;letter-spacing:.08em}
+.hrow .t small{display:block;font-size:.72rem;letter-spacing:.1em;color:var(--faint);text-transform:uppercase}
+.pillst{width:66px;height:38px;border-radius:20px;display:grid;place-items:center;background:var(--pill);color:var(--faint);flex:none}
+.pillst.ok{color:var(--green)}
+.pillst.bad{color:var(--red);background:var(--red-bg)}
+.pillst.busy{color:var(--amber)}
+.pillst svg.i{width:22px;height:22px}
+
+/* buttons */
+button{font:400 1rem/1.2 var(--sans);letter-spacing:.04em;border:1px solid var(--line);border-radius:12px;padding:14px 16px;min-height:52px;width:100%;margin:6px 0;cursor:pointer;background:var(--card2);color:var(--ink);transition:transform .1s,opacity .2s}
 button:active{transform:scale(.985)}
-button:hover:not(:disabled){border-color:rgba(255,255,255,.2)}
-button.primary{background:linear-gradient(180deg,var(--gold-hi),var(--gold));color:var(--gold-ink);border-color:transparent;font-weight:500;
-  text-transform:uppercase;letter-spacing:.18em;font-size:.82rem}
+button.primary{background:var(--amber);color:var(--amber-ink);border-color:transparent;font-weight:500}
 button:disabled{opacity:.35;cursor:not-allowed}
-button.danger{background:transparent;border-color:rgba(224,112,95,.5);color:var(--bad);text-transform:uppercase;letter-spacing:.16em;font-size:.82rem;font-weight:500}
+button.danger{background:var(--red-bg);border-color:rgba(229,83,75,.4);color:var(--red);font-weight:500}
 .row{display:flex;gap:10px;flex-wrap:wrap}
-.row>button{flex:1 1 150px}
+.row>button{flex:1 1 140px}
 
-/* results */
-.mod{border-top:1px solid var(--line);padding:14px 0}
-.mod:first-child{border-top:0}
-.mod h3{font-size:.95rem;font-weight:500;margin:0 0 6px;letter-spacing:.02em}
-.dtc{background:var(--bad-bg);border:1px solid rgba(224,112,95,.25);border-left:3px solid var(--bad);border-radius:12px;padding:10px 12px;margin:8px 0;font-size:.92rem}
-.dtc b{font-family:var(--mono);color:var(--bad);font-weight:500}
-.dtc .flags{font-size:.82rem;color:var(--muted);margin-top:4px}
-.clean{color:var(--ok);font-size:.9rem}
-.clean:before{content:"● ";font-size:.6rem;vertical-align:2px}
-.err{color:var(--faint);font-size:.88rem}
-.raw{font-family:var(--mono);font-size:.72rem;word-break:break-all;color:var(--faint);margin-top:4px}
-table{width:100%;border-collapse:collapse;font-size:.92rem;margin-top:6px}
-td{padding:9px 0;border-bottom:1px solid var(--line)}
-td:first-child{color:var(--muted)}
+/* remote-style cards */
+details.rc,.rc{background:var(--card);border:1px solid var(--line);border-radius:14px;margin:14px 0;padding:0 18px}
+details.rc>summary{list-style:none;display:flex;align-items:center;gap:18px;padding:22px 0;cursor:pointer;font-size:1.3rem;font-weight:400}
+details.rc>summary::-webkit-details-marker{display:none}
+details.rc>summary .s{flex:1;min-width:0}
+details.rc>summary .s small{display:block;font-size:.95rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+details.rc>summary .chev{transition:transform .2s;color:var(--muted)}
+details[open].rc>summary .chev{transform:rotate(90deg)}
+details.rc>.body{padding:0 0 18px}
+.note{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px;font-size:.88rem;color:var(--muted);margin:22px 0 0}
+.note b{color:var(--ink);font-weight:500}
+.warnnote{background:var(--red-bg);border:1px solid rgba(229,83,75,.3);border-radius:12px;padding:12px 14px;font-size:.88rem;color:#f0c3bf;margin:4px 0 12px}
+
+/* fault entries (sheet style) */
+.mod{padding:6px 0 10px}
+.mod h3{font-size:1.4rem;font-weight:400;margin:0 0 12px}
+.dtc{display:grid;grid-template-columns:44px 1fr;gap:14px;margin:0 0 20px}
+.dtc .ic{width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.04);display:grid;place-items:center;color:var(--ink)}
+.dtc .code{font-size:1.05rem;color:#d4d6d9}
+.dtc .ttl{font-size:1.35rem;color:var(--red);line-height:1.2;margin:2px 0 4px}
+.dtc .desc{font-size:1rem;color:#d4d6d9}
+.dtc .flags{font-size:.85rem;color:var(--muted);margin-top:6px}
+.dtc b{font-weight:400}
+.clean{color:var(--green);font-size:1.2rem}
+.err{color:var(--muted);font-size:1rem}
+.raw{font-family:var(--mono);font-size:.7rem;word-break:break-all;color:var(--faint);margin-top:4px}
+
+/* bottom sheet */
+.scrim{position:fixed;inset:0;background:rgba(0,0,0,.55);opacity:0;pointer-events:none;transition:opacity .25s;z-index:20}
+.scrim.open{opacity:1;pointer-events:auto}
+.sheet{position:fixed;left:0;right:0;bottom:0;max-height:86vh;overflow:auto;background:var(--sheet);border-radius:22px 22px 0 0;padding:14px 24px max(28px,env(safe-area-inset-bottom));
+  transform:translateY(105%);transition:transform .3s cubic-bezier(.2,.8,.2,1);z-index:21;max-width:560px;margin:0 auto}
+.sheet.open{transform:none}
+.grab{width:56px;height:4px;border-radius:2px;background:#3a414a;margin:0 auto 10px}
+.sheet .x{position:absolute;right:14px;top:22px}
+
+table{width:100%;border-collapse:collapse;font-size:1rem}
+td{padding:10px 0;border-bottom:1px solid var(--line)}
+td:first-child{color:var(--muted);letter-spacing:.04em}
 td:last-child{text-align:right;font-variant-numeric:tabular-nums}
 tr:last-child td{border-bottom:0}
-.events{list-style:none;padding:0;margin:8px 0 0;border-left:1px solid var(--line)}
-.events li{font-size:.86rem;margin:0 0 8px;padding-left:14px;position:relative;color:var(--muted)}
-.events li:before{content:"";position:absolute;left:-4px;top:7px;width:7px;height:7px;border-radius:50%;background:var(--gold)}
+.events{list-style:none;padding:0;margin:10px 0 0}
+.events li{font-size:.92rem;margin:0 0 8px;padding:10px 12px;background:var(--card2);border-radius:10px;color:var(--muted)}
 .events li:first-child{color:var(--ink)}
-#watchInfo{font-variant-numeric:tabular-nums}
-details.card summary{cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;font-size:.82rem;font-weight:500;letter-spacing:.28em;text-transform:uppercase}
-details.card summary::-webkit-details-marker{display:none}
-details.card summary:after{content:"+";color:var(--gold);font-size:1.2rem;font-weight:300}
-details[open].card summary:after{content:"–"}
-details.card .n{color:var(--gold);margin-right:10px;letter-spacing:.2em}
 input,select{font:inherit;width:100%;padding:13px 14px;margin:6px 0 10px;border-radius:12px;border:1px solid var(--line);background:var(--bg2);color:var(--ink)}
-input[type=checkbox]{width:20px;height:20px;margin:0;accent-color:var(--gold)}
+input[type=checkbox]{width:22px;height:22px;margin:0;accent-color:var(--amber)}
 label.sub{display:block}
 .check{display:flex!important;gap:10px;align-items:center;margin:8px 0}
-#log{font-family:var(--mono);font-size:.7rem;white-space:pre-wrap;word-break:break-all;max-height:260px;overflow:auto;background:var(--bg);border-radius:10px;padding:10px;margin:10px 0 0;color:var(--muted)}
-footer{text-align:center;color:var(--faint);font-size:.72rem;letter-spacing:.14em;margin-top:28px;text-transform:uppercase}
+#log{font-family:var(--mono);font-size:.7rem;white-space:pre-wrap;word-break:break-all;max-height:260px;overflow:auto;background:var(--bg);border-radius:10px;padding:10px;margin:0;color:var(--muted)}
+footer{text-align:center;color:var(--faint);font-size:.7rem;letter-spacing:.14em;margin-top:30px;text-transform:uppercase;padding:0 20px}
 </style>
 </head>
 <body>
-<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><linearGradient id="gold" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f0dcae"/><stop offset="1" stop-color="#b38d4f"/></linearGradient></defs></svg>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="paint" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f4f5f6"/><stop offset=".45" stop-color="#b9bdc2"/><stop offset="1" stop-color="#6d7277"/></linearGradient>
+    <linearGradient id="glass" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#0b0d10"/><stop offset=".6" stop-color="#22262b"/><stop offset="1" stop-color="#0b0d10"/></linearGradient>
+    <radialGradient id="rim" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#5b6168"/><stop offset=".55" stop-color="#2a2e33"/><stop offset=".62" stop-color="#121417"/><stop offset="1" stop-color="#0a0b0d"/></radialGradient>
+    <radialGradient id="shadow" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#000" stop-opacity=".75"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient>
+    <symbol id="i-bt" viewBox="0 0 24 24"><path d="M7 7l10 10-5 5V2l5 5L7 17"/></symbol>
+    <symbol id="i-scan" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M15.5 15.5L20 20"/></symbol>
+    <symbol id="i-batt" viewBox="0 0 24 24"><rect x="7" y="4" width="10" height="17" rx="2"/><path d="M10 2h4"/></symbol>
+    <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2L5 13.5h6L10 22l8-11.5h-6z"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></symbol>
+    <symbol id="i-tick" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+    <symbol id="i-warn" viewBox="0 0 24 24"><path d="M12 3.5L2.5 20.5h19z"/><path d="M12 10v5M12 17.8v.2"/></symbol>
+    <symbol id="i-share" viewBox="0 0 24 24"><path d="M12 3v12M7.5 7.5L12 3l4.5 4.5M5 13v7h14v-7"/></symbol>
+    <symbol id="i-erase" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6.5 7l1 13h9l1-13"/></symbol>
+    <symbol id="i-term" viewBox="0 0 24 24"><path d="M4 6l5 5-5 5M12 18h8"/></symbol>
+    <symbol id="i-pulse" viewBox="0 0 24 24"><path d="M2 12h4l3-7 5 14 3-7h5"/></symbol>
+    <symbol id="i-chip" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3"/></symbol>
+    <symbol id="i-plug" viewBox="0 0 24 24"><path d="M9 3v5M15 3v5M6.5 8h11v3a5.5 5.5 0 01-11 0zM12 16.5V21"/></symbol>
+    <symbol id="i-fan" viewBox="0 0 24 24"><circle cx="12" cy="12" r="2"/><path d="M12 10c0-4 1-7 4-7s3 4-2 7M14 12c4 0 7 1 7 4s-4 3-7-2M12 14c0 4-1 7-4 7s-3-4 2-7M10 12c-4 0-7-1-7-4s4-3 7 2"/></symbol>
+    <symbol id="i-gate" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M4 12h16M12 4c2.5 2.5 2.5 13.5 0 16M12 4c-2.5 2.5-2.5 13.5 0 16"/></symbol>
+    <symbol id="i-motor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 4v5M12 15v5M4 12h5M15 12h5"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.2"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M5 5l14 14M19 5L5 19"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></symbol>
+  </defs>
+</svg>
 <main>
-  <header class="mast">
-    <div class="brand">I&#8209;Pace <span>·</span> Diagnostics</div>
-    <div class="pill"><span class="dot" id="dot"></span><span id="statusText">Not connected</span></div>
-  </header>
-
-  <section class="hero" aria-label="Battery overview">
-    <div class="model">High-voltage battery</div>
-    <div class="gauge">
-      <svg viewBox="0 0 120 120"><circle class="track" cx="60" cy="60" r="52" pathLength="100" stroke-dasharray="75 100"/><circle class="arc" id="socArc" cx="60" cy="60" r="52" pathLength="100" stroke-dasharray="75 100" stroke-dashoffset="75"/></svg>
-      <div class="read"><div class="num" id="socVal">––<small>%</small></div><div class="lbl">State of charge</div></div>
+  <section class="top">
+    <div class="name-row">
+      <button class="carname" id="carName" title="Tap to rename">Charguar</button>
+      <button class="iconbtn" id="btnInfo" aria-label="About this app"><svg class="i"><use href="#i-info"/></svg></button>
     </div>
-    <div class="stats">
-      <div class="stat"><div class="v" id="hvVolt">––</div><div class="k">Volts</div></div>
-      <div class="stat"><div class="v" id="hvTemp">––</div><div class="k">Pack °C</div></div>
-      <div class="stat"><div class="v" id="hvHealth">––</div><div class="k">Health</div></div>
-    </div>
+    <div class="big"><span id="bigVolt">–– V</span> <span class="amber" id="bigSoc">––%</span></div>
+    <div class="state"><span class="dot" id="dot"></span><span id="statusText">Not connected</span></div>
+    <svg class="car" viewBox="0 0 400 150" aria-hidden="true">
+      <ellipse cx="205" cy="128" rx="190" ry="12" fill="url(#shadow)"/>
+      <path d="M26 98c0-10 8-17 26-20l70-9c26-22 62-36 112-36 44 0 74 5 96 14 18 8 30 22 38 36 5 3 6 8 6 14v12c0 6-4 8-10 8h-22a32 32 0 00-63 0H145a32 32 0 00-63 0H38c-8 0-12-4-12-13z" fill="url(#paint)"/>
+      <path d="M131 71c24-19 58-30 103-30 38 0 63 5 81 13 12 6 22 14 28 22z" fill="url(#glass)"/>
+      <path d="M238 41l-4 33" stroke="#9aa0a6" stroke-width="3"/>
+      <path d="M40 92h30M335 78l26 2" stroke="#e5534b" stroke-width="0" />
+      <path d="M354 80c6 0 12 2 15 6" stroke="#c9373b" stroke-width="3" stroke-linecap="round" fill="none"/>
+      <path d="M36 92c8-3 18-5 30-5" stroke="#cfe8ff" stroke-width="2" stroke-linecap="round" fill="none" opacity=".8"/>
+      <path d="M120 96h200" stroke="rgba(0,0,0,.18)" stroke-width="2"/>
+      <circle cx="113" cy="114" r="25" fill="url(#rim)"/><circle cx="113" cy="114" r="8" fill="#3b4046"/>
+      <circle cx="302" cy="114" r="25" fill="url(#rim)"/><circle cx="302" cy="114" r="8" fill="#3b4046"/>
+    </svg>
     <div class="vin" id="vinLine"><span id="modeNote">Connect your adapter to begin</span></div>
   </section>
 
-  <div class="notice"><b>Read-only by default.</b> Everything except the separate "Clear fault codes" section only reads. The app never changes settings or updates software, and it refuses any other kind of command. If the car shows a high-voltage warning telling you not to charge or drive, follow that first.</div>
+  <div class="quick">
+    <button class="qbtn" id="qConnect" aria-label="Connect"><svg class="i"><use href="#i-bt"/></svg></button>
+    <button class="qbtn" id="qScan" aria-label="Scan for faults" disabled><svg class="i"><use href="#i-scan"/></svg></button>
+    <button class="qbtn" id="qBatt" aria-label="Read battery" disabled><svg class="i"><use href="#i-batt"/></svg></button>
+    <button class="qbtn" id="qWatch" aria-label="Charge watch" disabled><svg class="i"><use href="#i-bolt"/></svg></button>
+  </div>
+  <div class="qlabels"><span>Connect</span><span>Scan</span><span>Battery</span><span>Charge</span></div>
 
-  <section class="card">
-    <div class="eyebrow"><span class="n">01</span><h2>Connect</h2></div>
-    <p class="sub">Plug the adapter into the OBD port (under the dashboard, driver's side, above the pedals). Turn the car on by pressing start without your foot on the brake. Then tap Connect and choose the adapter. Don't pair it in Android's Bluetooth settings.</p>
-    <button class="primary" id="btnConnect">Connect to adapter</button>
-  </section>
+  <div class="wrap">
+    <div class="lightcard">
+      <div class="caps">High-voltage battery</div>
+      <div class="lrow"><div class="lbig" id="hvHealth">Health ––</div><div class="lside"><svg class="i"><use href="#i-batt"/></svg><span id="hvTemp">––°C</span></div></div>
+    </div>
 
-  <section class="card">
-    <div class="eyebrow"><span class="n">02</span><h2>Fault codes</h2></div>
-    <p class="sub">Asks each module for its stored fault codes, then for the snapshot the car saved when each code was set.</p>
+    <div class="statbar">
+      <div><div class="v" id="stOdo">––</div><div class="k">Odometer</div></div>
+      <div><div class="v" id="stCells">––</div><div class="k">Cell spread</div></div>
+      <div><div class="v" id="stCodes">––</div><div class="k">Fault codes</div></div>
+    </div>
+
+    <div class="updated" id="lastUpdated">Not scanned yet</div>
+    <div class="sect">Health</div>
+    <div id="healthList"></div>
     <div class="row">
       <button class="primary" id="btnScanCharge" disabled>Scan battery &amp; charging</button>
       <button id="btnScanAll" disabled>Scan all modules · 2 min</button>
     </div>
-    <div id="dtcOut"></div>
-  </section>
 
-  <section class="card">
-    <div class="eyebrow"><span class="n">03</span><h2>Battery readings</h2></div>
-    <button id="btnLive" disabled>Read battery values</button>
-    <table id="liveTable"></table>
-  </section>
+    <div class="note"><b>Read-only by default.</b> Everything except "Clear fault codes" only reads. The app never changes settings or updates software, and refuses any other command. If the car shows a high-voltage warning telling you not to charge or drive, follow that first.</div>
 
-  <section class="card">
-    <div class="eyebrow"><span class="n">04</span><h2>Charge watch</h2></div>
-    <p class="sub">Start watching, wait for one or two readings, then plug the charging cable in. The app records battery values and checks the battery and charger modules every few seconds, so you can see exactly when the charge fails. Keep the screen on.</p>
-    <div class="row">
-      <button class="primary" id="btnWatch" disabled>Start watching</button>
-      <button id="btnStop" disabled>Stop</button>
-    </div>
-    <p class="sub" id="watchInfo"></p>
-    <ul class="events" id="events"></ul>
-  </section>
+    <div class="sect">Vehicle</div>
 
-  <section class="card">
-    <div class="eyebrow"><span class="n">05</span><h2>Report</h2></div>
-    <p class="sub">Saves everything above as a text file for the garage, including a full log.</p>
-    <div class="row">
-      <button class="primary" id="btnShare">Share report</button>
-      <button id="btnSave">Download</button>
-    </div>
-  </section>
+    <details class="rc" id="cardConnect" open>
+      <summary><svg class="i"><use href="#i-bt"/></svg><span class="s">Connect<small>Veepeak OBDCheck BLE</small></span><svg class="i chev"><use href="#i-chev"/></svg></summary>
+      <div class="body">
+        <p class="sub">Plug the adapter into the OBD port (under the dashboard, driver's side, above the pedals). Turn the car on by pressing start without your foot on the brake. Then tap Connect and choose the adapter. Don't pair it in Android's Bluetooth settings.</p>
+        <button class="primary" id="btnConnect">Connect to adapter</button>
+      </div>
+    </details>
 
-  <details class="card" id="clearCard">
-    <summary><span><span class="n">06</span>Clear fault codes</span></summary>
-    <div class="notice"><b>Read this first.</b> Clearing deletes the stored codes and their snapshots. Jaguar uses that history to diagnose the fault, so <b>save or share a report first</b>. Clearing does not repair anything. If the fault is still there, the code will come back, often straight away or when you next plug in. Do not keep clearing a high-voltage warning so you can drive or charge.</div>
-    <p class="sub">Clears codes in one module only, then reads it again so you can see what comes back.</p>
-    <label class="sub" for="clearModule">Module</label>
-    <select id="clearModule"></select>
-    <label class="sub check"><input type="checkbox" id="clearSaved"> I have saved or shared a report from this session</label>
-    <label class="sub" for="clearConfirm">Type CLEAR to confirm</label>
-    <input id="clearConfirm" autocomplete="off" autocapitalize="characters">
-    <button class="danger" id="btnClear" disabled>Clear codes in this module</button>
-    <div id="clearOut"></div>
-  </details>
+    <details class="rc" id="cardBatt">
+      <summary><svg class="i"><use href="#i-batt"/></svg><span class="s">Battery readings<small id="battSummary">Voltages, temperatures, health</small></span><svg class="i chev"><use href="#i-chev"/></svg></summary>
+      <div class="body">
+        <button id="btnLive" disabled>Read battery values</button>
+        <table id="liveTable"></table>
+      </div>
+    </details>
 
-  <details class="card">
-    <summary><span><span class="n">07</span>Adapter log</span></summary>
-    <pre id="log"></pre>
-  </details>
+    <details class="rc" id="cardWatch">
+      <summary><svg class="i"><use href="#i-pulse"/></svg><span class="s">Charge watch<small>Log what happens when you plug in</small></span><svg class="i chev"><use href="#i-chev"/></svg></summary>
+      <div class="body">
+        <p class="sub">Start watching, wait for one or two readings, then plug the charging cable in. The app records battery values and checks the battery and charger modules every few seconds, so you can see exactly when the charge fails. Keep the screen on.</p>
+        <div class="row">
+          <button class="primary" id="btnWatch" disabled>Start watching</button>
+          <button id="btnStop" disabled>Stop</button>
+        </div>
+        <p class="sub" id="watchInfo"></p>
+        <ul class="events" id="events"></ul>
+      </div>
+    </details>
+
+    <details class="rc" id="cardDetails">
+      <summary><svg class="i"><use href="#i-list"/></svg><span class="s">Fault details<small>Every module, with raw snapshot data</small></span><svg class="i chev"><use href="#i-chev"/></svg></summary>
+      <div class="body"><div id="dtcOut"><p class="sub">Run a scan to see fault details here.</p></div></div>
+    </details>
+
+    <details class="rc">
+      <summary><svg class="i"><use href="#i-share"/></svg><span class="s">Report<small>Share with the garage</small></span><svg class="i chev"><use href="#i-chev"/></svg></summary>
+      <div class="body">
+        <p class="sub">Saves everything as a text file for the garage, including a full log.</p>
+        <div class="row">
+          <button class="primary" id="btnShare">Share report</button>
+          <button id="btnSave">Download</button>
+        </div>
+      </div>
+    </details>
+
+    <details class="rc" id="clearCard">
+      <summary><svg class="i"><use href="#i-erase"/></svg><span class="s">Clear fault codes<small>Advanced</small></span><svg class="i chev"><use href="#i-chev"/></svg></summary>
+      <div class="body">
+        <div class="warnnote"><b>Read this first.</b> Clearing deletes the stored codes and their snapshots. Jaguar uses that history to diagnose the fault, so <b>save or share a report first</b>. Clearing does not repair anything. If the fault is still there, the code will come back, often straight away or when you next plug in. Do not keep clearing a high-voltage warning so you can drive or charge.</div>
+        <p class="sub">Clears codes in one module only, then reads it again so you can see what comes back.</p>
+        <label class="sub" for="clearModule">Module</label>
+        <select id="clearModule"></select>
+        <label class="sub check"><input type="checkbox" id="clearSaved"> I have saved or shared a report from this session</label>
+        <label class="sub" for="clearConfirm">Type CLEAR to confirm</label>
+        <input id="clearConfirm" autocomplete="off" autocapitalize="characters">
+        <button class="danger" id="btnClear" disabled>Clear codes in this module</button>
+        <div id="clearOut"></div>
+      </div>
+    </details>
+
+    <details class="rc">
+      <summary><svg class="i"><use href="#i-term"/></svg><span class="s">Adapter log<small>For troubleshooting</small></span><svg class="i chev"><use href="#i-chev"/></svg></summary>
+      <div class="body"><pre id="log"></pre></div>
+    </details>
+  </div>
 
   <footer>Independent diagnostic tool · not affiliated with Jaguar</footer>
 </main>
+
+<div class="scrim" id="scrim"></div>
+<div class="sheet" id="sheet" role="dialog" aria-modal="true">
+  <div class="grab"></div>
+  <button class="iconbtn x" id="sheetClose" aria-label="Close"><svg class="i"><use href="#i-x"/></svg></button>
+  <div id="sheetBody"></div>
+</div>
 
 <script>
 "use strict";
@@ -473,36 +586,62 @@ function decodeSnapshot(b){
 }
 function fmt(v){ return Number.isInteger(v)? String(v) : v.toFixed(2); }
 
+function svgIcon(id){ const ns="http://www.w3.org/2000/svg"; const sv=document.createElementNS(ns,"svg"); sv.setAttribute("class","i"); const u=document.createElementNS(ns,"use"); u.setAttribute("href","#"+id); sv.appendChild(u); return sv; }
+function noteParts(code){ const n=DTC_NOTES[code]; if(!n) return ["Fault code stored","No plain-English description in this app. Jaguar can look it up from the code."]; const i=n.indexOf(":"); return [n.slice(0,i), n.slice(i+1).trim().replace(/^./,c=>c.toUpperCase())]; }
 function renderModule(res){
   const box=el("div","mod");
   box.appendChild(el("h3",null,res.module+" · "+res.desc));
-  if (res.error){ box.appendChild(el("div","err",res.error==="NO DATA"?"No reply (module asleep, or not fitted)":"No result: "+res.error)); return box; }
-  if (!res.dtcs.length){ box.appendChild(el("div","clean","No fault codes stored")); return box; }
+  if (res.error){ box.appendChild(el("div","err",res.error==="NO DATA"?"No reply. The module may be asleep or not fitted.":"No result: "+res.error)); return box; }
+  if (!res.dtcs.length){ box.appendChild(el("div","clean","No issues detected")); return box; }
   for (const d of res.dtcs){
-    const c=el("div","dtc");
-    const t=el("div"); t.appendChild(el("b",null,d.full)); if (DTC_NOTES[d.code]) t.appendChild(document.createTextNode(" · "+DTC_NOTES[d.code]));
-    c.appendChild(t);
-    c.appendChild(el("div","flags","Status: "+(d.words.join(", ")||"stored")));
-    if (d.snapshotDecoded.length) c.appendChild(el("div","flags","When it was logged: "+d.snapshotDecoded.join(", ")));
-    c.appendChild(el("div","raw","snapshot "+d.snapshot));
-    c.appendChild(el("div","raw","extended "+d.extended));
-    box.appendChild(c);
+    const [ttl,desc]=noteParts(d.code);
+    const c=el("div","dtc"); const ic=el("div","ic"); ic.appendChild(svgIcon("i-warn")); c.appendChild(ic);
+    const tx=el("div"); tx.appendChild(el("div","code",d.full)); tx.appendChild(el("div","ttl",ttl)); tx.appendChild(el("div","desc",desc));
+    tx.appendChild(el("div","flags","Status: "+(d.words.join(", ")||"stored")));
+    if (d.snapshotDecoded.length) tx.appendChild(el("div","flags","When it was logged: "+d.snapshotDecoded.join(", ")));
+    tx.appendChild(el("div","raw","snapshot "+d.snapshot)); tx.appendChild(el("div","raw","extended "+d.extended));
+    c.appendChild(tx); box.appendChild(c);
   }
   return box;
 }
+/* Health list */
+const HEALTH_ICONS={BECM:"i-batt",BCCM:"i-plug",PCM:"i-chip",GWM:"i-gate",DCDC:"i-bolt","EPIC-F":"i-motor","EPIC-R":"i-motor",HVAC:"i-fan"};
+const HEALTH_NAMES={BECM:"HV Battery",BCCM:"Charger & charge port",PCM:"Powertrain",GWM:"Gateway",DCDC:"DC-DC converter","EPIC-F":"Front motor inverter","EPIC-R":"Rear motor inverter",HVAC:"Climate & HV heater"};
+function healthRow(short){
+  let r=document.getElementById("h-"+short); if (r) return r;
+  const m=MODULES.find(x=>x[1]===short);
+  r=el("button","hrow"); r.id="h-"+short; r.appendChild(svgIcon(HEALTH_ICONS[short]||"i-chip"));
+  const t=el("span","t",HEALTH_NAMES[short]||m[2]); t.appendChild(el("small",null,short)); r.appendChild(t);
+  const p=el("span","pillst"); p.appendChild(svgIcon("i-tick")); p.firstChild.style.opacity=".25"; r.appendChild(p);
+  r.onclick=()=>{ const res=scanResults[short]; if(res) openSheet(res); };
+  $("healthList").appendChild(r); return r;
+}
+function setHealth(short, state){
+  const p=healthRow(short).querySelector(".pillst"); p.className="pillst "+state; p.textContent="";
+  const ic = state==="bad"?"i-warn":state==="busy"?"i-scan":"i-tick"; const s=svgIcon(ic); if(state==="none"||state==="") s.style.opacity=".25"; p.appendChild(s);
+}
+MODULES.filter(m=>m[3]).forEach(m=>healthRow(m[1]));
+function openSheet(res){ const b=$("sheetBody"); b.textContent=""; b.appendChild(renderModule(res)); $("sheet").classList.add("open"); $("scrim").classList.add("open"); }
+function closeSheet(){ $("sheet").classList.remove("open"); $("scrim").classList.remove("open"); }
+$("sheetClose").onclick=closeSheet; $("scrim").onclick=closeSheet;
 async function scan(all){
   busy(true);
-  const out=$("dtcOut"); out.textContent="";
+  const out=$("dtcOut"); out.textContent=""; for (const k in scanResults) delete scanResults[k];
   const list = MODULES.filter(m=>all||m[3]);
   let i=0;
   try{
     for (const m of list){
-      i++; setStatus("Reading "+m[1]+" ("+i+" of "+list.length+")","busy");
+      i++; setStatus("Reading "+m[1]+" ("+i+" of "+list.length+")","busy"); setHealth(m[1],"busy");
       let res; try{ res=await readModule(m); }catch(e){ res={module:m[1],desc:m[2],addr:hex3(m[0]),dtcs:[],error:e.message}; }
       scanResults[m[1]]=res; out.appendChild(renderModule(res));
+      setHealth(m[1], res.error? "none" : res.dtcs.length? "bad" : "ok");
     }
     const total=Object.values(scanResults).reduce((n,r)=>n+r.dtcs.length,0);
-    setStatus("Scan finished: "+total+" fault code(s) found","on");
+    setStatus(total? total+" fault code"+(total>1?"s":"")+" found" : "No faults found", total?"bad":"on");
+    $("stCodes").textContent=total; $("stCodes").style.color= total? "var(--red)":"var(--green)";
+    $("lastUpdated").textContent="Last updated "+new Date().toLocaleString("en-GB",{hour:"2-digit",minute:"2-digit",day:"numeric",month:"long"});
+    const worst=Object.values(scanResults).find(r=>r.dtcs.length && (r.module==="BECM"||r.module==="BCCM"));
+    if (worst) openSheet(worst);
   }finally{ busy(false); }
 }
 
@@ -517,12 +656,13 @@ async function readLive(){
 }
 function renderHero(vals){
   const g=k=>vals[k]?vals[k].v:null;
-  const soc=g("State of charge");
-  if (soc!=null){ const pct=Math.max(0,Math.min(100,soc)); $("socVal").innerHTML=""; $("socVal").append(String(Math.round(pct)), Object.assign(document.createElement("small"),{textContent:"%"}));
-    $("socArc").style.strokeDashoffset = String(75 - 75*pct/100); }
-  const v=g("Pack voltage"); if (v!=null) $("hvVolt").textContent=Math.round(v);
-  const t=g("Average battery temp"); if (t!=null) $("hvTemp").textContent=t.toFixed(1);
-  const h=g("Health (capacity)"); if (h!=null) $("hvHealth").textContent=Math.round(h)+"%";
+  const soc=g("State of charge"); if (soc!=null) $("bigSoc").textContent=Math.round(soc)+"%";
+  const v=g("Pack voltage"); if (v!=null) $("bigVolt").textContent=Math.round(v)+" V";
+  const t=g("Average battery temp"); if (t!=null) $("hvTemp").textContent=t.toFixed(1)+"°C";
+  const h=g("Health (capacity)"); if (h!=null) $("hvHealth").textContent="Health "+Math.round(h)+"%";
+  const o=g("Odometer"); if (o!=null) $("stOdo").textContent=Math.round(o*0.621371).toLocaleString("en-GB")+" mi";
+  const lo=g("Lowest cell voltage"), hi=g("Highest cell voltage"); if (lo!=null&&hi!=null) $("stCells").textContent=Math.round((hi-lo)*1000)+" mV";
+  if (soc!=null && v!=null) $("battSummary").textContent=Math.round(soc)+"% · "+Math.round(v)+" V"+(t!=null?" · "+t.toFixed(1)+"°C":"");
 }
 function renderLive(vals){
   renderHero(vals);
@@ -620,9 +760,17 @@ async function share(){ reportSaved=true; updateClearBtn(); const f=reportFile()
 /* ============ Wiring ============ */
 const demo = new URLSearchParams(location.search).has("demo");
 if (demo) $("modeNote").textContent="Demo mode · simulated car";
+try{ const n=localStorage.getItem("carName"); if(n) $("carName").textContent=n; }catch(e){}
+$("carName").onclick=()=>{ const n=prompt("Name your car", $("carName").textContent); if(n&&n.trim()){ $("carName").textContent=n.trim().slice(0,24); try{localStorage.setItem("carName",n.trim().slice(0,24));}catch(e){} } };
+$("btnInfo").onclick=()=>{ const b=$("sheetBody"); b.textContent=""; const m=el("div","mod"); m.appendChild(el("h3",null,"About")); m.appendChild(el("p","sub","An independent diagnostic tool for the I-Pace, using a Bluetooth OBD-II adapter. It is not made by or affiliated with Jaguar. Everything is read-only unless you use Clear fault codes. Module addresses and battery formulas come from the open-source OVMS project.")); b.appendChild(m); $("sheet").classList.add("open"); $("scrim").classList.add("open"); };
+function syncQuick(){ $("qConnect").disabled=$("btnConnect").disabled; $("qScan").disabled=$("btnScanCharge").disabled; $("qBatt").disabled=$("btnLive").disabled; $("qWatch").disabled=$("btnWatch").disabled && !watching; $("qWatch").classList.toggle("live",watching); $("qConnect").classList.toggle("live",connected); }
+$("qConnect").onclick=()=>$("btnConnect").click();
+$("qScan").onclick=()=>{ $("healthList").scrollIntoView({behavior:"smooth",block:"center"}); $("btnScanCharge").click(); };
+$("qBatt").onclick=()=>{ $("cardBatt").open=true; $("cardBatt").scrollIntoView({behavior:"smooth"}); $("btnLive").click(); };
+$("qWatch").onclick=()=>{ $("cardWatch").open=true; $("cardWatch").scrollIntoView({behavior:"smooth"}); if(watching) $("btnStop").click(); else $("btnWatch").click(); };
 let connected=false;
-function setButtons(on){ connected=on; setTimeout(updateClearBtn); for (const id of ["btnScanCharge","btnScanAll","btnLive","btnWatch"]) $(id).disabled=!on; }
-function busy(b){ for (const id of ["btnScanCharge","btnScanAll","btnLive","btnWatch","btnConnect"]) $(id).disabled = b || (id!=="btnConnect" && !connected); }
+function setButtons(on){ connected=on; setTimeout(updateClearBtn); for (const id of ["btnScanCharge","btnScanAll","btnLive","btnWatch"]) $(id).disabled=!on; syncQuick(); }
+function busy(b){ for (const id of ["btnScanCharge","btnScanAll","btnLive","btnWatch","btnConnect"]) $(id).disabled = b || (id!=="btnConnect" && !connected); syncQuick(); }
 $("btnConnect").onclick = async ()=>{
   try{
     setStatus("Connecting…","busy");
@@ -632,7 +780,7 @@ $("btnConnect").onclick = async ()=>{
     setStatus("Connected to "+name+". Checking the car…","busy");
     const v=await uds(0x7E4,"22F190");
     if (v.error){ setStatus("Adapter connected, but the battery module didn't answer ("+v.error+"). Is the car switched on?","busy"); }
-    else { vin=String.fromCharCode(...v.bytes.slice(3).filter(c=>c>=32&&c<127)); setStatus("Connected","on"); $("vinLine").textContent="VIN "+vin+(demo?" · demo":""); }
+    else { vin=String.fromCharCode(...v.bytes.slice(3).filter(c=>c>=32&&c<127)); setStatus("Connected","on"); $("vinLine").textContent="VIN "+vin+(demo?" · demo":""); $("cardConnect").open=false; }
     setButtons(true);
   }catch(e){ setStatus(e.message,""); log("connect error: "+e.message); }
 };
@@ -671,6 +819,7 @@ $("btnClear").onclick=async ()=>{
     out.appendChild(el("p","clean","Cleared. Reading "+mod[1]+" again in 3 seconds…"));
     await sleep(3000);
     const res=await readModule(mod); scanResults[mod[1]]=res;
+    if (document.getElementById("h-"+mod[1]) || mod[3]) setHealth(mod[1], res.error? "none" : res.dtcs.length? "bad" : "ok");
     out.appendChild(renderModule(res));
     clearEvents.push(when+"  After clearing, "+mod[1]+" shows "+(res.error?res.error:res.dtcs.length+" code(s): "+res.dtcs.map(d=>d.full).join(", ")));
     setStatus(res.dtcs.length? mod[1]+": "+res.dtcs.length+" code(s) came straight back" : mod[1]+": no codes after clearing","on");
