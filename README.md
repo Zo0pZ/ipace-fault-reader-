@@ -7,7 +7,7 @@ A read-only web app for a Jaguar I-Pace. It talks to a Bluetooth Low Energy OBD-
 - Watches the battery and charger modules while the car is plugged in and logs when faults start failing.
 - Saves or shares a text report.
 
-**Read-only by design:** the code refuses to send anything except UDS 0x19 and 0x22 read requests and a fixed list of adapter setup commands. It cannot clear codes, write settings or flash software.
+**Read-only by default:** the code refuses everything except UDS 0x19 and 0x22 read requests and a fixed list of adapter setup commands. The one exception is an optional "Clear fault codes" section (UDS 0x14 FFFFFF, one module at a time), which needs a ticked checkbox, typing CLEAR and two confirmations. It never writes settings or flashes software.
 
 Open the page with `?demo` to try it against a simulated car.
 

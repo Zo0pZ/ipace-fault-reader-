@@ -62,7 +62,7 @@ details summary{cursor:pointer;color:var(--muted);font-size:.92rem;padding:4px 0
   <h1>I-Pace Fault Reader</h1>
   <p class="sub">Reads fault codes and battery data through your Veepeak OBDCheck BLE adapter. <span id="modeNote"></span></p>
 
-  <div class="notice"><b>Read-only.</b> This app can only read. It cannot clear codes, change settings or update software, and it refuses to send any other kind of command. If the car shows a high-voltage warning telling you not to charge or drive, follow that first.</div>
+  <div class="notice"><b>Read-only by default.</b> Everything except the separate "Clear fault codes" section only reads. The app never changes settings or updates software, and it refuses any other kind of command. If the car shows a high-voltage warning telling you not to charge or drive, follow that first.</div>
 
   <section class="card">
     <h2>1. Connect</h2>
@@ -106,6 +106,19 @@ details summary{cursor:pointer;color:var(--muted);font-size:.92rem;padding:4px 0
       <button id="btnSave">Download report</button>
     </div>
   </section>
+
+  <details class="card" id="clearCard">
+    <summary><b>6. Clear fault codes (advanced)</b></summary>
+    <div class="notice" style="margin-top:8px"><b>Read this first.</b> Clearing deletes the stored codes and their snapshots. Jaguar uses that history to diagnose the fault, so <b>save or share a report first</b>. Clearing does not repair anything. If the fault is still there, the code will come back, often straight away or when you next plug in. Do not keep clearing a high-voltage warning so you can drive or charge.</div>
+    <p class="sub">Clears codes in one module only, then reads it again so you can see what comes back.</p>
+    <label class="sub" for="clearModule">Module</label>
+    <select id="clearModule" style="font:inherit;width:100%;padding:10px;margin:6px 0;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink)"></select>
+    <label class="sub" style="display:flex;gap:8px;align-items:center;margin:8px 0"><input type="checkbox" id="clearSaved"> I have saved or shared a report from this session</label>
+    <label class="sub" for="clearConfirm">Type CLEAR to confirm</label>
+    <input id="clearConfirm" autocomplete="off" autocapitalize="characters" style="font:inherit;width:100%;padding:10px;margin:6px 0;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink)">
+    <button id="btnClear" disabled style="background:var(--bad-bg);color:var(--bad);font-weight:600">Clear codes in this module</button>
+    <div id="clearOut"></div>
+  </details>
 
   <details class="card">
     <summary>Adapter log (for troubleshooting)</summary>
@@ -203,6 +216,10 @@ function assertReadOnly(hex){
   throw new Error("Blocked: this app only sends read requests (service "+sid+" refused)");
 }
 
+/* The ONLY non-read request the app can send: ClearDiagnosticInformation (0x14) for all groups, used by the Clear section */
+const CLEAR_REQUEST = "14FFFFFF";
+let reportSaved = false;
+
 /* ============ UI helpers ============ */
 const $ = id => document.getElementById(id);
 const logLines = [];
@@ -267,7 +284,11 @@ class DemoTransport {
       const b=hex.match(/../g); if(b.length<=7) return b.join(" ")+"\r\r";
       let out=hex3(b.length)+"\r0: "+b.slice(0,6).join(" ")+"\r"; let i=6,n=1;
       while(i<b.length){ out+=(n%16).toString(16).toUpperCase()+": "+b.slice(i,i+7).join(" ")+"\r"; i+=7;n++; } return out+"\r"; };
+    if (cmd==="14FFFFFF"){ this.cleared=this.cleared||{}; this.cleared[H]=true; return "54\r\r"; }
+    const cl = this.cleared && this.cleared[H];
     if (cmd==="1902FF"){
+      if (cl && H===0x7E4) return iso("5902FF"+(plugged?"0AA60009":""));
+      if (cl) return iso("5902FF");
       if (H===0x7E4) return iso("5902FF"+"0AA600"+(plugged?"09":"08")+"F00100"+"08");
       if (H===0x7E5) return iso("5902FF"+"0D9400"+"08"+"C06482"+"09");
       if (H===0x726) return iso("5902FF"+"947972"+"08");
@@ -327,8 +348,9 @@ function parseElm(text){
   return {bytes:msgs[msgs.length-1]};
 }
 const NRC={0x11:"service not supported",0x12:"sub-function not supported",0x13:"bad length",0x22:"conditions not correct",0x31:"not available",0x33:"security access denied",0x7F:"not supported in this session"};
-async function uds(tx, hex){
-  hex=hex.toUpperCase(); assertReadOnly(hex);
+async function uds(tx, hex, allowClear=false){
+  hex=hex.toUpperCase();
+  if (!(allowClear && hex===CLEAR_REQUEST)) assertReadOnly(hex);
   await selectModule(tx);
   const raw = await T.send(hex, 8000);
   log(hex3(tx)+" > "+hex+"  < "+raw.replace(/\s+/g," ").trim());
@@ -475,7 +497,7 @@ function buildReport(){
   L.push("Created: "+new Date().toLocaleString("en-GB"));
   L.push("VIN (from BECM): "+(vin||"not read"));
   L.push("Adapter: "+adapterInfo);
-  L.push("Read-only scan. No codes were cleared and nothing was written to the car.");
+  L.push(clearEvents.length? "Codes WERE cleared in this session (see below)." : "Read-only session. No codes were cleared and nothing was written to the car.");
   L.push("");
   L.push("== FAULT CODES ==");
   const mods=Object.values(scanResults);
@@ -504,18 +526,20 @@ function buildReport(){
     const keys=Object.keys(watchRows[0]); L.push(keys.join(","));
     for (const r of watchRows) L.push(keys.map(k=>r[k]).join(","));
   }
+  L.push(""); L.push("== CODES CLEARED IN THIS SESSION ==");
+  L.push(...(clearEvents.length?clearEvents:["(none)"]));
   L.push(""); L.push("== ADAPTER LOG =="); L.push(...logLines);
   return L.join("\n");
 }
 function reportFile(){ const name="ipace-report-"+new Date().toISOString().slice(0,16).replace(/[:T]/g,"-")+".txt"; return new File([buildReport()],name,{type:"text/plain"}); }
-function download(){ const f=reportFile(); const a=el("a"); a.href=URL.createObjectURL(f); a.download=f.name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),5000); }
-async function share(){ const f=reportFile(); if (navigator.canShare && navigator.canShare({files:[f]})){ try{ await navigator.share({files:[f],title:"I-Pace fault report"}); }catch(e){} } else download(); }
+function download(){ reportSaved=true; updateClearBtn(); const f=reportFile(); const a=el("a"); a.href=URL.createObjectURL(f); a.download=f.name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),5000); }
+async function share(){ reportSaved=true; updateClearBtn(); const f=reportFile(); if (navigator.canShare && navigator.canShare({files:[f]})){ try{ await navigator.share({files:[f],title:"I-Pace fault report"}); }catch(e){} } else download(); }
 
 /* ============ Wiring ============ */
 const demo = new URLSearchParams(location.search).has("demo");
 if (demo) $("modeNote").textContent="Demo mode: talking to a simulated car, not a real adapter.";
 let connected=false;
-function setButtons(on){ connected=on; for (const id of ["btnScanCharge","btnScanAll","btnLive","btnWatch"]) $(id).disabled=!on; }
+function setButtons(on){ connected=on; setTimeout(updateClearBtn); for (const id of ["btnScanCharge","btnScanAll","btnLive","btnWatch"]) $(id).disabled=!on; }
 function busy(b){ for (const id of ["btnScanCharge","btnScanAll","btnLive","btnWatch","btnConnect"]) $(id).disabled = b || (id!=="btnConnect" && !connected); }
 $("btnConnect").onclick = async ()=>{
   try{
@@ -537,6 +561,41 @@ $("btnWatch").onclick=watch;
 $("btnStop").onclick=()=>{ watching=false; $("btnStop").disabled=true; };
 $("btnSave").onclick=download;
 $("btnShare").onclick=share;
+/* ============ Clear codes (explicit, one module at a time) ============ */
+const clearEvents=[];
+for (const m of MODULES){ const o=document.createElement("option"); o.value=m[0]; o.textContent=m[1]+" · "+m[2]; $("clearModule").appendChild(o); }
+function updateClearBtn(){
+  $("btnClear").disabled = !(connected && $("clearSaved").checked && $("clearConfirm").value.trim().toUpperCase()==="CLEAR");
+}
+$("clearSaved").onchange=updateClearBtn;
+$("clearConfirm").oninput=updateClearBtn;
+$("btnClear").onclick=async ()=>{
+  const tx=parseInt($("clearModule").value,10), mod=MODULES.find(m=>m[0]===tx);
+  if (!reportSaved && !confirm("You haven't saved or shared a report in this session. Clear anyway? The codes and snapshots will be lost.")) return;
+  if (!confirm("Clear all fault codes in "+mod[1]+" ("+mod[2]+")? This can't be undone.")) return;
+  $("clearConfirm").value=""; updateClearBtn();
+  const out=$("clearOut"); out.textContent="";
+  busy(true);
+  try{
+    setStatus("Clearing codes in "+mod[1],"busy");
+    const r=await uds(tx, CLEAR_REQUEST, true);
+    const when=new Date().toLocaleString("en-GB");
+    if (r.error){
+      out.appendChild(el("p","err","The module didn't clear: "+r.error+". It may need a dealer tool."));
+      clearEvents.push(when+"  Clear "+mod[1]+" refused: "+r.error);
+      setStatus("Clear refused by "+mod[1],"on"); return;
+    }
+    clearEvents.push(when+"  Cleared all codes in "+mod[1]);
+    out.appendChild(el("p","clean","Cleared. Reading "+mod[1]+" again in 3 seconds…"));
+    await sleep(3000);
+    const res=await readModule(mod); scanResults[mod[1]]=res;
+    out.appendChild(renderModule(res));
+    clearEvents.push(when+"  After clearing, "+mod[1]+" shows "+(res.error?res.error:res.dtcs.length+" code(s): "+res.dtcs.map(d=>d.full).join(", ")));
+    setStatus(res.dtcs.length? mod[1]+": "+res.dtcs.length+" code(s) came straight back" : mod[1]+": no codes after clearing","on");
+  }catch(e){ out.appendChild(el("p","err","Error: "+e.message)); }
+  finally{ busy(false); updateClearBtn(); }
+};
+
 window.__test = {assertReadOnly, parseElm, dtcName};
 </script>
 </body>
