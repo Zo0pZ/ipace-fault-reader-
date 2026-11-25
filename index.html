@@ -782,7 +782,18 @@ $("btnConnect").onclick = async ()=>{
     if (v.error){ setStatus("Adapter connected, but the battery module didn't answer ("+v.error+"). Is the car switched on?","busy"); }
     else { vin=String.fromCharCode(...v.bytes.slice(3).filter(c=>c>=32&&c<127)); setStatus("Connected","on"); $("vinLine").textContent="VIN "+vin+(demo?" · demo":""); $("cardConnect").open=false; }
     setButtons(true);
-  }catch(e){ setStatus(e.message,""); log("connect error: "+e.message); }
+  }catch(e){
+    log("connect error: "+e.message);
+    if (/globally disabled|no Web Bluetooth/i.test(e.message)){
+      setStatus("Bluetooth blocked in this browser","bad");
+      const b=$("sheetBody"); b.textContent=""; const m=el("div","mod"); m.appendChild(el("h3",null,"Open this in Google Chrome"));
+      for (const t of ["This browser has Bluetooth for web pages switched off. Samsung Internet, and links opened inside other apps, block it.",
+        "1. Copy this page's address and open it in the Google Chrome app (install it from the Play Store if needed).",
+        "2. Make sure Bluetooth and Location are switched on in Android's quick settings.",
+        "3. When you tap Connect, allow Chrome to find nearby devices."]) m.appendChild(el("p","sub",t));
+      b.appendChild(m); $("sheet").classList.add("open"); $("scrim").classList.add("open");
+    } else setStatus(e.message,"");
+  }
 };
 $("btnScanCharge").onclick=()=>scan(false);
 $("btnScanAll").onclick=()=>scan(true);
