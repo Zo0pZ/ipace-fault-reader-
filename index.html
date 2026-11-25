@@ -5,91 +5,161 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>I-Pace Fault Reader</title>
 <meta name="description" content="Read-only fault and battery reader for a Jaguar I-Pace, using a Bluetooth OBD-II adapter.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet">
+<meta name="theme-color" content="#0b0c0e">
 <style>
 :root{
-  --bg:#f6f7f9;--card:#ffffff;--ink:#16191d;--muted:#5d6671;--line:#dde1e6;
-  --accent:#0b6e4f;--accent-ink:#ffffff;--warn-bg:#fff4d6;--warn-ink:#6b4a00;
-  --bad:#b3261e;--bad-bg:#fde7e5;--ok:#1f7a3a;--ok-bg:#e3f4e8;--chip:#eef1f4;
+  --bg:#0b0c0e;--bg2:#121417;--card:rgba(255,255,255,.035);--card-hi:rgba(255,255,255,.06);
+  --ink:#f2efe9;--muted:#9a978f;--faint:#5f5d58;--line:rgba(255,255,255,.09);
+  --gold:#c9a96e;--gold-hi:#e6cf9f;--gold-ink:#141210;
+  --ok:#7fc8a0;--warn:#e0b25a;--bad:#e0705f;--bad-bg:rgba(224,112,95,.09);--chip:rgba(255,255,255,.05);
+  --warn-bg:rgba(201,169,110,.08);--warn-ink:#d9c49a;
   --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --sans:"Jost",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  color-scheme:dark;
 }
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
-  --bg:#111417;--card:#1a1e23;--ink:#e8ebee;--muted:#9aa4ae;--line:#2b3138;
-  --accent:#3fb68b;--accent-ink:#06140f;--warn-bg:#3a2f10;--warn-ink:#f3d58a;
-  --bad:#ff8a80;--bad-bg:#3d1a18;--ok:#7bd99a;--ok-bg:#16301f;--chip:#242a31;}}
-:root[data-theme="dark"]{
-  --bg:#111417;--card:#1a1e23;--ink:#e8ebee;--muted:#9aa4ae;--line:#2b3138;
-  --accent:#3fb68b;--accent-ink:#06140f;--warn-bg:#3a2f10;--warn-ink:#f3d58a;
-  --bad:#ff8a80;--bad-bg:#3d1a18;--ok:#7bd99a;--ok-bg:#16301f;--chip:#242a31;}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
-main{max-width:720px;margin:0 auto;padding:16px 16px 48px}
-h1{font-size:1.35rem;margin:4px 0 2px}
-h2{font-size:1.05rem;margin:0 0 8px}
+html{background:var(--bg)}
+body{margin:0;color:var(--ink);font:300 16px/1.5 var(--sans);letter-spacing:.01em;min-height:100vh;
+  background:radial-gradient(120% 60% at 50% -10%,#24272c 0%,rgba(11,12,14,0) 60%),var(--bg);background-attachment:fixed}
+main{max-width:640px;margin:0 auto;padding:max(20px,env(safe-area-inset-top)) 16px 64px}
+b,strong{font-weight:500}
 p{margin:6px 0}
-.sub{color:var(--muted);font-size:.92rem}
-.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin:12px 0}
-.notice{background:var(--warn-bg);color:var(--warn-ink);border-radius:10px;padding:10px 12px;font-size:.9rem}
-button{font:inherit;border:0;border-radius:10px;padding:12px 14px;min-height:48px;width:100%;margin:6px 0;cursor:pointer;
-  background:var(--chip);color:var(--ink);text-align:left}
-button.primary{background:var(--accent);color:var(--accent-ink);font-weight:600}
-button:disabled{opacity:.45;cursor:not-allowed}
-.row{display:flex;gap:8px;flex-wrap:wrap}
-.row>button{flex:1 1 140px}
-.status{display:flex;align-items:center;gap:8px;font-size:.95rem}
-.dot{width:10px;height:10px;border-radius:50%;background:var(--muted);flex:none}
-.dot.on{background:var(--ok)}
-.dot.busy{background:#d99a00}
-.mod{border-top:1px solid var(--line);padding:10px 0}
+.sub{color:var(--muted);font-size:.9rem}
+
+/* masthead */
+.mast{display:flex;align-items:center;justify-content:space-between;padding:4px 2px 18px}
+.brand{font-weight:500;letter-spacing:.3em;text-transform:uppercase;font-size:.72rem;color:var(--ink);white-space:nowrap}
+.brand span{color:var(--gold)}
+.pill{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:999px;padding:6px 12px;font-size:.78rem;
+  letter-spacing:.12em;text-transform:uppercase;color:var(--muted);max-width:60%}
+#statusText{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--faint);flex:none}
+.dot.on{background:var(--ok);box-shadow:0 0 10px var(--ok)}
+.dot.busy{background:var(--warn);box-shadow:0 0 10px var(--warn);animation:pulse 1.2s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.35}}
+
+/* hero */
+.hero{position:relative;text-align:center;padding:26px 16px 22px;border-radius:24px;border:1px solid var(--line);
+  background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.01));overflow:hidden}
+.hero:before{content:"";position:absolute;inset:auto -20% -60% -20%;height:70%;background:radial-gradient(closest-side,rgba(201,169,110,.16),transparent);pointer-events:none}
+.model{font-size:.72rem;letter-spacing:.38em;text-transform:uppercase;color:var(--muted)}
+.gauge{position:relative;width:220px;height:220px;margin:14px auto 6px}
+.gauge svg{width:100%;height:100%;transform:rotate(135deg)}
+.gauge .track{fill:none;stroke:rgba(255,255,255,.07);stroke-width:6;stroke-linecap:round}
+.gauge .arc{fill:none;stroke:url(#gold);stroke-width:6;stroke-linecap:round;transition:stroke-dashoffset 1s cubic-bezier(.2,.8,.2,1)}
+.gauge .read{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.gauge .num{font-size:3.4rem;font-weight:300;line-height:1;letter-spacing:-.02em}
+.gauge .num small{font-size:1.2rem;color:var(--muted);margin-left:2px}
+.gauge .lbl{font-size:.7rem;letter-spacing:.3em;text-transform:uppercase;color:var(--muted);margin-top:8px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border-radius:14px;overflow:hidden;margin-top:14px}
+.stat{background:var(--bg2);padding:12px 6px}
+.stat .v{font-size:1.15rem;font-weight:400;font-variant-numeric:tabular-nums}
+.stat .k{font-size:.66rem;letter-spacing:.22em;text-transform:uppercase;color:var(--muted);margin-top:2px}
+.vin{margin-top:12px;font-size:.72rem;letter-spacing:.2em;color:var(--faint);font-family:var(--mono)}
+
+/* sections */
+.card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:18px;margin:14px 0}
+.eyebrow{display:flex;align-items:baseline;gap:10px;margin:0 0 6px}
+.eyebrow .n{font-size:.72rem;color:var(--gold);letter-spacing:.2em;font-variant-numeric:tabular-nums}
+.eyebrow h2{margin:0;font-size:.82rem;font-weight:500;letter-spacing:.28em;text-transform:uppercase}
+.notice{background:var(--warn-bg);color:var(--warn-ink);border:1px solid rgba(201,169,110,.22);border-radius:14px;padding:12px 14px;font-size:.86rem;margin:14px 0}
+button{font:400 .95rem/1.2 var(--sans);letter-spacing:.06em;border:1px solid var(--line);border-radius:14px;padding:14px 16px;min-height:52px;width:100%;margin:6px 0;
+  cursor:pointer;background:var(--chip);color:var(--ink);text-align:center;transition:background .2s,border-color .2s,transform .1s}
+button:active{transform:scale(.985)}
+button:hover:not(:disabled){border-color:rgba(255,255,255,.2)}
+button.primary{background:linear-gradient(180deg,var(--gold-hi),var(--gold));color:var(--gold-ink);border-color:transparent;font-weight:500;
+  text-transform:uppercase;letter-spacing:.18em;font-size:.82rem}
+button:disabled{opacity:.35;cursor:not-allowed}
+button.danger{background:transparent;border-color:rgba(224,112,95,.5);color:var(--bad);text-transform:uppercase;letter-spacing:.16em;font-size:.82rem;font-weight:500}
+.row{display:flex;gap:10px;flex-wrap:wrap}
+.row>button{flex:1 1 150px}
+
+/* results */
+.mod{border-top:1px solid var(--line);padding:14px 0}
 .mod:first-child{border-top:0}
-.mod h3{font-size:.98rem;margin:0 0 4px}
-.dtc{background:var(--bad-bg);border-radius:8px;padding:8px 10px;margin:6px 0}
-.dtc b{font-family:var(--mono)}
-.dtc .flags{font-size:.85rem;color:var(--muted)}
-.clean{color:var(--ok)}
-.err{color:var(--muted);font-size:.9rem}
-.raw{font-family:var(--mono);font-size:.78rem;word-break:break-all;color:var(--muted)}
-table{width:100%;border-collapse:collapse;font-size:.92rem}
-td{padding:5px 0;border-bottom:1px solid var(--line)}
-td:last-child{text-align:right;font-variant-numeric:tabular-nums;font-family:var(--mono)}
-#log{font-family:var(--mono);font-size:.75rem;white-space:pre-wrap;word-break:break-all;max-height:260px;overflow:auto;
-  background:var(--chip);border-radius:8px;padding:8px;margin:0}
-details summary{cursor:pointer;color:var(--muted);font-size:.92rem;padding:4px 0}
-.events li{font-size:.9rem;margin:3px 0}
+.mod h3{font-size:.95rem;font-weight:500;margin:0 0 6px;letter-spacing:.02em}
+.dtc{background:var(--bad-bg);border:1px solid rgba(224,112,95,.25);border-left:3px solid var(--bad);border-radius:12px;padding:10px 12px;margin:8px 0;font-size:.92rem}
+.dtc b{font-family:var(--mono);color:var(--bad);font-weight:500}
+.dtc .flags{font-size:.82rem;color:var(--muted);margin-top:4px}
+.clean{color:var(--ok);font-size:.9rem}
+.clean:before{content:"● ";font-size:.6rem;vertical-align:2px}
+.err{color:var(--faint);font-size:.88rem}
+.raw{font-family:var(--mono);font-size:.72rem;word-break:break-all;color:var(--faint);margin-top:4px}
+table{width:100%;border-collapse:collapse;font-size:.92rem;margin-top:6px}
+td{padding:9px 0;border-bottom:1px solid var(--line)}
+td:first-child{color:var(--muted)}
+td:last-child{text-align:right;font-variant-numeric:tabular-nums}
+tr:last-child td{border-bottom:0}
+.events{list-style:none;padding:0;margin:8px 0 0;border-left:1px solid var(--line)}
+.events li{font-size:.86rem;margin:0 0 8px;padding-left:14px;position:relative;color:var(--muted)}
+.events li:before{content:"";position:absolute;left:-4px;top:7px;width:7px;height:7px;border-radius:50%;background:var(--gold)}
+.events li:first-child{color:var(--ink)}
+#watchInfo{font-variant-numeric:tabular-nums}
+details.card summary{cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;font-size:.82rem;font-weight:500;letter-spacing:.28em;text-transform:uppercase}
+details.card summary::-webkit-details-marker{display:none}
+details.card summary:after{content:"+";color:var(--gold);font-size:1.2rem;font-weight:300}
+details[open].card summary:after{content:"–"}
+details.card .n{color:var(--gold);margin-right:10px;letter-spacing:.2em}
+input,select{font:inherit;width:100%;padding:13px 14px;margin:6px 0 10px;border-radius:12px;border:1px solid var(--line);background:var(--bg2);color:var(--ink)}
+input[type=checkbox]{width:20px;height:20px;margin:0;accent-color:var(--gold)}
+label.sub{display:block}
+.check{display:flex!important;gap:10px;align-items:center;margin:8px 0}
+#log{font-family:var(--mono);font-size:.7rem;white-space:pre-wrap;word-break:break-all;max-height:260px;overflow:auto;background:var(--bg);border-radius:10px;padding:10px;margin:10px 0 0;color:var(--muted)}
+footer{text-align:center;color:var(--faint);font-size:.72rem;letter-spacing:.14em;margin-top:28px;text-transform:uppercase}
 </style>
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><linearGradient id="gold" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f0dcae"/><stop offset="1" stop-color="#b38d4f"/></linearGradient></defs></svg>
 <main>
-  <h1>I-Pace Fault Reader</h1>
-  <p class="sub">Reads fault codes and battery data through your Veepeak OBDCheck BLE adapter. <span id="modeNote"></span></p>
+  <header class="mast">
+    <div class="brand">I&#8209;Pace <span>·</span> Diagnostics</div>
+    <div class="pill"><span class="dot" id="dot"></span><span id="statusText">Not connected</span></div>
+  </header>
+
+  <section class="hero" aria-label="Battery overview">
+    <div class="model">High-voltage battery</div>
+    <div class="gauge">
+      <svg viewBox="0 0 120 120"><circle class="track" cx="60" cy="60" r="52" pathLength="100" stroke-dasharray="75 100"/><circle class="arc" id="socArc" cx="60" cy="60" r="52" pathLength="100" stroke-dasharray="75 100" stroke-dashoffset="75"/></svg>
+      <div class="read"><div class="num" id="socVal">––<small>%</small></div><div class="lbl">State of charge</div></div>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="v" id="hvVolt">––</div><div class="k">Volts</div></div>
+      <div class="stat"><div class="v" id="hvTemp">––</div><div class="k">Pack °C</div></div>
+      <div class="stat"><div class="v" id="hvHealth">––</div><div class="k">Health</div></div>
+    </div>
+    <div class="vin" id="vinLine"><span id="modeNote">Connect your adapter to begin</span></div>
+  </section>
 
   <div class="notice"><b>Read-only by default.</b> Everything except the separate "Clear fault codes" section only reads. The app never changes settings or updates software, and it refuses any other kind of command. If the car shows a high-voltage warning telling you not to charge or drive, follow that first.</div>
 
   <section class="card">
-    <h2>1. Connect</h2>
-    <p class="sub">Plug the adapter into the OBD port (under the dashboard, driver's side, above the pedals). Turn the car on (press the start button without your foot on the brake). Then tap Connect and pick the adapter from the list. Don't pair it in Android's Bluetooth settings.</p>
+    <div class="eyebrow"><span class="n">01</span><h2>Connect</h2></div>
+    <p class="sub">Plug the adapter into the OBD port (under the dashboard, driver's side, above the pedals). Turn the car on by pressing start without your foot on the brake. Then tap Connect and choose the adapter. Don't pair it in Android's Bluetooth settings.</p>
     <button class="primary" id="btnConnect">Connect to adapter</button>
-    <div class="status"><span class="dot" id="dot"></span><span id="statusText">Not connected</span></div>
   </section>
 
   <section class="card">
-    <h2>2. Read fault codes</h2>
+    <div class="eyebrow"><span class="n">02</span><h2>Fault codes</h2></div>
     <p class="sub">Asks each module for its stored fault codes, then for the snapshot the car saved when each code was set.</p>
     <div class="row">
-      <button class="primary" id="btnScanCharge" disabled>Scan charging &amp; battery modules</button>
-      <button id="btnScanAll" disabled>Scan all modules (about 2 minutes)</button>
+      <button class="primary" id="btnScanCharge" disabled>Scan battery &amp; charging</button>
+      <button id="btnScanAll" disabled>Scan all modules · 2 min</button>
     </div>
     <div id="dtcOut"></div>
   </section>
 
   <section class="card">
-    <h2>3. Battery readings</h2>
-    <button id="btnLive" disabled>Read battery values now</button>
+    <div class="eyebrow"><span class="n">03</span><h2>Battery readings</h2></div>
+    <button id="btnLive" disabled>Read battery values</button>
     <table id="liveTable"></table>
   </section>
 
   <section class="card">
-    <h2>4. Watch while plugging in</h2>
-    <p class="sub">Start watching, wait for one or two readings, then plug the charging cable in. The app records battery values and checks the battery and charger modules for new faults every few seconds, so you can see exactly when the charge fails. Keep the screen on.</p>
+    <div class="eyebrow"><span class="n">04</span><h2>Charge watch</h2></div>
+    <p class="sub">Start watching, wait for one or two readings, then plug the charging cable in. The app records battery values and checks the battery and charger modules every few seconds, so you can see exactly when the charge fails. Keep the screen on.</p>
     <div class="row">
       <button class="primary" id="btnWatch" disabled>Start watching</button>
       <button id="btnStop" disabled>Stop</button>
@@ -99,31 +169,33 @@ details summary{cursor:pointer;color:var(--muted);font-size:.92rem;padding:4px 0
   </section>
 
   <section class="card">
-    <h2>5. Save the report</h2>
-    <p class="sub">Saves everything above as a text file you can send to the garage, alongside a full log.</p>
+    <div class="eyebrow"><span class="n">05</span><h2>Report</h2></div>
+    <p class="sub">Saves everything above as a text file for the garage, including a full log.</p>
     <div class="row">
       <button class="primary" id="btnShare">Share report</button>
-      <button id="btnSave">Download report</button>
+      <button id="btnSave">Download</button>
     </div>
   </section>
 
   <details class="card" id="clearCard">
-    <summary><b>6. Clear fault codes (advanced)</b></summary>
-    <div class="notice" style="margin-top:8px"><b>Read this first.</b> Clearing deletes the stored codes and their snapshots. Jaguar uses that history to diagnose the fault, so <b>save or share a report first</b>. Clearing does not repair anything. If the fault is still there, the code will come back, often straight away or when you next plug in. Do not keep clearing a high-voltage warning so you can drive or charge.</div>
+    <summary><span><span class="n">06</span>Clear fault codes</span></summary>
+    <div class="notice"><b>Read this first.</b> Clearing deletes the stored codes and their snapshots. Jaguar uses that history to diagnose the fault, so <b>save or share a report first</b>. Clearing does not repair anything. If the fault is still there, the code will come back, often straight away or when you next plug in. Do not keep clearing a high-voltage warning so you can drive or charge.</div>
     <p class="sub">Clears codes in one module only, then reads it again so you can see what comes back.</p>
     <label class="sub" for="clearModule">Module</label>
-    <select id="clearModule" style="font:inherit;width:100%;padding:10px;margin:6px 0;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink)"></select>
-    <label class="sub" style="display:flex;gap:8px;align-items:center;margin:8px 0"><input type="checkbox" id="clearSaved"> I have saved or shared a report from this session</label>
+    <select id="clearModule"></select>
+    <label class="sub check"><input type="checkbox" id="clearSaved"> I have saved or shared a report from this session</label>
     <label class="sub" for="clearConfirm">Type CLEAR to confirm</label>
-    <input id="clearConfirm" autocomplete="off" autocapitalize="characters" style="font:inherit;width:100%;padding:10px;margin:6px 0;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink)">
-    <button id="btnClear" disabled style="background:var(--bad-bg);color:var(--bad);font-weight:600">Clear codes in this module</button>
+    <input id="clearConfirm" autocomplete="off" autocapitalize="characters">
+    <button class="danger" id="btnClear" disabled>Clear codes in this module</button>
     <div id="clearOut"></div>
   </details>
 
   <details class="card">
-    <summary>Adapter log (for troubleshooting)</summary>
+    <summary><span><span class="n">07</span>Adapter log</span></summary>
     <pre id="log"></pre>
   </details>
+
+  <footer>Independent diagnostic tool · not affiliated with Jaguar</footer>
 </main>
 
 <script>
@@ -443,7 +515,17 @@ async function readLive(){
   }
   return vals;
 }
+function renderHero(vals){
+  const g=k=>vals[k]?vals[k].v:null;
+  const soc=g("State of charge");
+  if (soc!=null){ const pct=Math.max(0,Math.min(100,soc)); $("socVal").innerHTML=""; $("socVal").append(String(Math.round(pct)), Object.assign(document.createElement("small"),{textContent:"%"}));
+    $("socArc").style.strokeDashoffset = String(75 - 75*pct/100); }
+  const v=g("Pack voltage"); if (v!=null) $("hvVolt").textContent=Math.round(v);
+  const t=g("Average battery temp"); if (t!=null) $("hvTemp").textContent=t.toFixed(1);
+  const h=g("Health (capacity)"); if (h!=null) $("hvHealth").textContent=Math.round(h)+"%";
+}
 function renderLive(vals){
+  renderHero(vals);
   const t=$("liveTable"); t.textContent="";
   for (const [k,x] of Object.entries(vals)){
     const tr=el("tr"); tr.appendChild(el("td",null,k)); tr.appendChild(el("td",null, x? fmt(x.v)+" "+x.unit : "–")); t.appendChild(tr);
@@ -537,7 +619,7 @@ async function share(){ reportSaved=true; updateClearBtn(); const f=reportFile()
 
 /* ============ Wiring ============ */
 const demo = new URLSearchParams(location.search).has("demo");
-if (demo) $("modeNote").textContent="Demo mode: talking to a simulated car, not a real adapter.";
+if (demo) $("modeNote").textContent="Demo mode · simulated car";
 let connected=false;
 function setButtons(on){ connected=on; setTimeout(updateClearBtn); for (const id of ["btnScanCharge","btnScanAll","btnLive","btnWatch"]) $(id).disabled=!on; }
 function busy(b){ for (const id of ["btnScanCharge","btnScanAll","btnLive","btnWatch","btnConnect"]) $(id).disabled = b || (id!=="btnConnect" && !connected); }
@@ -550,7 +632,7 @@ $("btnConnect").onclick = async ()=>{
     setStatus("Connected to "+name+". Checking the car…","busy");
     const v=await uds(0x7E4,"22F190");
     if (v.error){ setStatus("Adapter connected, but the battery module didn't answer ("+v.error+"). Is the car switched on?","busy"); }
-    else { vin=String.fromCharCode(...v.bytes.slice(3).filter(c=>c>=32&&c<127)); setStatus("Connected. Car VIN "+vin,"on"); }
+    else { vin=String.fromCharCode(...v.bytes.slice(3).filter(c=>c>=32&&c<127)); setStatus("Connected","on"); $("vinLine").textContent="VIN "+vin+(demo?" · demo":""); }
     setButtons(true);
   }catch(e){ setStatus(e.message,""); log("connect error: "+e.message); }
 };
